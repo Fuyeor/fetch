@@ -488,7 +488,7 @@ mod tests {
 
     #[test]
     fn loads_repository_mock_catalog() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let catalog = load_catalog(&root).expect("repository mock catalog must load");
         assert_eq!(catalog.mappings.len(), 3);
         assert_eq!(catalog.pages.len(), 5);

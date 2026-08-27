@@ -149,7 +149,7 @@ mod tests {
         let index_dir = tempfile::tempdir().expect("temporary index directory must be created");
         let engine =
             Arc::new(SearchEngine::open(index_dir.path()).expect("temporary index must open"));
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let app = router(AppState::new(engine, root));
 
         let rebuild = app

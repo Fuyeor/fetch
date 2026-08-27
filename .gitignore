@@ -63,3 +63,6 @@
 
 .DS_Store
 Thumbs.db
+
+# Tantivy runtime state
+/apps/engine/.fetch-index/
