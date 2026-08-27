@@ -1,0 +1,31 @@
+{
+  "name": "@fuyeor/fetch-front-end",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "Fuyeor <https://www.fuyeor.com/@Fuyeor>",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fuyeor/commons": "^0.1.2",
+    "@fuyeor/config": "^0.1.1",
+    "@fuyeor/interactify": "^0.1.1",
+    "@fuyeor/locale": "^0.1.0",
+    "@fuyeor/vue-query": "^0.1.0",
+    "@fuyeor/vue-router": "^0.0.9",
+    "vue": "^3.5.41"
+  },
+  "devDependencies": {
+    "@fuyeor/tsconfig": "0.1.0",
+    "@types/node": "^26.2.0",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "html-minifier-terser": "^7.2.0",
+    "lightningcss": "^1.33.0",
+    "typescript": "^7.0.2",
+    "vite": "8.0.1"
+  }
+}

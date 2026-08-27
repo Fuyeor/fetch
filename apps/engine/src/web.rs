@@ -41,9 +41,9 @@ impl AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(index_page))
-        .route("/api/v1/search", get(search))
-        .route("/api/v1/index/status", get(index_status))
-        .route("/api/v1/index/rebuild", post(rebuild_index))
+        .route("/search", get(search))
+        .route("/index/status", get(index_status))
+        .route("/index/rebuild", post(rebuild_index))
         .with_state(state)
 }
 
@@ -106,7 +106,7 @@ fn unix_timestamp() -> u64 {
 
 /// Serve a dependency-free CSR mock console so the backend can be tested in a browser.
 async fn index_page() -> Html<&'static str> {
-    Html(include_str!("../../../../web/index.html"))
+    Html(include_str!("../../../web/index.html"))
 }
 
 /// Convert internal failures into one JSON error shape without leaking implementation details.
@@ -157,7 +157,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/index/rebuild")
+                    .uri("/index/rebuild")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -174,7 +174,7 @@ mod tests {
         let search = app
             .oneshot(
                 Request::builder()
-                    .uri("/api/v1/search?q=搜索引擎&limit=10")
+                    .uri("/search?q=搜索引擎&limit=10")
                     .body(Body::empty())
                     .unwrap(),
             )

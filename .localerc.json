@@ -1,0 +1,10 @@
+{
+  "basic": {
+    "source": "apps/{id}/front-end/node_modules/@fuyeor/locale/src/common.json",
+    "outDir": "apps/{id}/front-end/public/assets/locale"
+  },
+  "main": {
+    "source": "apps/{id}/front-end/src/locale/locale.json",
+    "outDir": "apps/{id}/front-end/public/assets/locale"
+  }
+}

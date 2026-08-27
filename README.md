@@ -1,6 +1,6 @@
 **Fetch** is the reference implementation of the **Search Patterns Protocol (SPP)**. 
 
-The [Search Patterns Protocol](https://fuyeor.com/t/560) is an experimental indexing standard based on pattern matching. Unlike traditional crawling methods, SPP is designed for controlled environments, specifically catering to enterprises and organizations that manage multiple web properties and require a unified, high-precision cross-site search infrastructure.
+The [Search Patterns Protocol](https://reference.fuyeor.com/fetch/search-patterns-protocol) is an experimental indexing standard based on pattern matching. Unlike traditional crawling methods, SPP is designed for controlled environments, specifically catering to enterprises and organizations that manage multiple web properties and require a unified, high-precision cross-site search infrastructure.
 
 SPP is architecture-agnostic. Whether a site is a Client-Side Rendered (CSR) app, a Multi-Page Application (MPA), or built on any backend stack, it can be seamlessly indexed provided that the Search Patterns Protocol is implemented.
 

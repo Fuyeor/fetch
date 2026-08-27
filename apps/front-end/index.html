@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="">
+
+<head>
+    <script>
+        // IIFE for instant application and change listening, optimized for readability and size.
+        (function () {
+            const root = document.documentElement;
+            const storageKey = 'appearance';
+            const dark = window.matchMedia('(prefers-color-scheme: dark)');
+            const contrast = window.matchMedia('(prefers-contrast: high)');
+            const fontSizeMap = { smallest: .8, small: .9, medium: 1, large: 1.1, largest: 1.2 };
+
+            function apply() {
+                try {
+                    const settings = JSON.parse(localStorage.getItem(storageKey) || '{}');
+                    // Apply Theme: user setting > contrast > dark
+                    const theme = (settings.theme && settings.theme !== 'auto' && settings.theme) || (contrast.matches && 'contrast') || (dark.matches && 'dark');
+                    theme ? root.setAttribute('data-theme', theme) : root.removeAttribute('data-theme');
+                    // Apply Font Size
+                    const size = fontSizeMap[settings.fontSize];
+                    root.style.fontSize = size ? `${size}rem` : '';
+                } catch { }
+            }
+
+            function handleThemeChange() {
+                try {
+                    // Only apply system changes if user setting is 'auto' or unset
+                    const settings = JSON.parse(localStorage.getItem(storageKey) || '{}');
+                    if (settings.theme === 'auto' || !settings.theme) apply();
+                } catch { }
+            }
+
+            dark.addEventListener('change', handleThemeChange);
+            contrast.addEventListener('change', handleThemeChange);
+            window.addEventListener('storage', e => { if (e.key === storageKey) apply() });
+
+            apply(); // Initial application
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+
+    <!-- preconnect and preload access -->
+    <link rel="preconnect" href="https://deliver.fuyeor.net" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link rel="dns-prefetch" href="//depend.fuyeor.net">
+    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+
+    <link rel="preload" href="__interactify-css__" as="style">
+    <link rel="preload" href="/assets/css/style.css" as="style">
+    <!-- main-js-preload-placeholder -->
+
+    <!-- default website information -->
+    <title>Fetch Search</title>
+    <meta name="description" content="">
+
+    <!-- theme color on mobile -->
+    <meta name="theme-color" content="#aea4e4" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#18191a" media="(prefers-color-scheme: dark)">
+
+    <!-- brand favicon -->
+    <link rel="icon" href="/favicon.svg" sizes="any">
+
+    <link rel="stylesheet" href="__interactify-css__">
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <script src="src/main.ts" type="module"></script>
+</head>
+
+<body id="app">
+
+    <noscript>
+        <img class="no-script-logo" src="https://deliver.fuyeor.net/@fu/trademark/tm/official.png">
+        <h2>JavaScript is not available</h2>
+        <strong>The site cannot load due to a missing JavaScript environment.</strong>
+
+        <style>
+            body,
+            html {
+                height: 100%;
+                display: flex;
+                justify-content: center;
+                align-items: center
+            }
+
+            noscript {
+                max-width: 660px;
+                padding: 20px;
+
+                .no-script-logo {
+                    max-width: 100px;
+                    margin-bottom: 10px
+                }
+
+                h2,
+                strong {
+                    color: #586577
+                }
+            }
+
+            /* hide splash screen when JS is unavailable */
+            .splash-screen {
+                display: none !important;
+            }
+        </style>
+    </noscript>
+
+</body>
+
+</html>
