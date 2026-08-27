@@ -1,20 +1,24 @@
-// apps/fetch/back-end/src/search.rs
+// apps/engine/src/search.rs
 
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use jieba_rs::Jieba;
 use tantivy::collector::{Count, TopDocs};
 use tantivy::directory::MmapDirectory;
 use tantivy::query::QueryParser;
-use tantivy::schema::{
-    Field, IndexRecordOption, STORED, STRING, Schema, TantivyDocument, TextFieldIndexing,
-    TextOptions, Value as TantivyValue,
-};
+use tantivy::schema::{TantivyDocument, Value as TantivyValue};
 use tantivy::tokenizer::{TextAnalyzer, Token, TokenStream, Tokenizer};
-use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, doc};
+use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Term};
 
-use crate::model::{IndexPage, SearchHit, SearchResponse};
+use crate::core::document::SearchDocument;
+use crate::index::{
+    IndexManifest, ManifestDocument, SearchFields, build_schema, fields_from_schema, first_text,
+    load_manifest, persist_manifest,
+};
+use crate::model::{SearchHit, SearchResponse};
 
 type AppResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -86,15 +90,14 @@ impl TokenStream for JiebaTokenStream {
     }
 }
 
-/// Field handles kept together so query and document code cannot drift apart.
-#[derive(Clone, Copy)]
-struct SearchFields {
-    url: Field,
-    title: Field,
-    content: Field,
-    updated_at: Field,
-    image_url: Field,
-    graph: Field,
+/// Changes applied to the Tantivy index in one committed batch.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct IndexSyncReport {
+    pub generation: u64,
+    pub added: usize,
+    pub updated: usize,
+    pub deleted: usize,
+    pub unchanged: usize,
 }
 
 /// A single-writer Tantivy index with manual reader reloads after commits.
@@ -103,17 +106,23 @@ pub struct SearchEngine {
     reader: IndexReader,
     writer: Mutex<IndexWriter>,
     fields: SearchFields,
+    manifest_path: PathBuf,
+    generation: AtomicU64,
 }
 
 impl SearchEngine {
     /// Open or create the on-disk index and register the Chinese analyzer.
     pub fn open(index_path: &Path) -> AppResult<Self> {
         std::fs::create_dir_all(index_path)?;
-        let (schema, fields) = build_schema();
-        let index = if index_path.join("meta.json").exists() {
-            Index::open(MmapDirectory::open(index_path)?)?
+        let manifest_path = index_path.join("manifest.json");
+        let initial_generation = load_manifest(&manifest_path)?.generation;
+        let (new_schema, new_fields) = build_schema();
+        let (index, fields) = if index_path.join("meta.json").exists() {
+            let index = Index::open(MmapDirectory::open(index_path)?)?;
+            let fields = fields_from_schema(&index.schema())?;
+            (index, fields)
         } else {
-            Index::create_in_dir(index_path, schema.clone())?
+            (Index::create_in_dir(index_path, new_schema)?, new_fields)
         };
         index.tokenizers().register(
             "jieba_search",
@@ -129,22 +138,102 @@ impl SearchEngine {
             reader,
             writer: Mutex::new(writer),
             fields,
+            manifest_path,
+            generation: AtomicU64::new(initial_generation),
         })
     }
 
-    /// Replace the current index atomically at the Tantivy commit boundary.
-    pub fn replace_all(&self, pages: &[IndexPage]) -> AppResult<()> {
+    /// Apply an authoritative finite catalog using stable IDs and content hashes.
+    pub fn sync_documents(&self, pages: &[SearchDocument]) -> AppResult<IndexSyncReport> {
         let mut writer = self
             .writer
             .lock()
             .map_err(|_| "index writer lock poisoned")?;
-        writer.delete_all_documents()?;
+        let mut manifest = load_manifest(&self.manifest_path)?;
+        let live_document_count = self.document_count()?;
+        let legacy_index = !self.manifest_path.exists() && live_document_count > 0;
+        let mut incoming = BTreeMap::new();
         for page in pages {
-            writer.add_document(self.to_document(page))?;
+            if incoming.insert(page.document_id.clone(), page).is_some() {
+                return Err(format!("duplicate document_id: {}", page.document_id).into());
+            }
+        }
+
+        let mut report = IndexSyncReport {
+            generation: manifest.generation,
+            ..IndexSyncReport::default()
+        };
+        if legacy_index {
+            writer.delete_all_documents()?;
+            report.deleted = live_document_count;
+            manifest = IndexManifest::default();
+        }
+
+        for (document_id, page) in &incoming {
+            match manifest.documents.get(document_id) {
+                None => report.added += 1,
+                Some(previous) if previous.content_hash == page.content_hash => {
+                    report.unchanged += 1
+                }
+                Some(_) => report.updated += 1,
+            }
+        }
+        report.deleted += manifest
+            .documents
+            .keys()
+            .filter(|document_id| !incoming.contains_key(*document_id))
+            .count();
+
+        let changed = report.added + report.updated + report.deleted;
+        if changed == 0 {
+            return Ok(report);
+        }
+        let generation = manifest.generation.saturating_add(1);
+        report.generation = generation;
+
+        for document_id in manifest.documents.keys().filter(|document_id| {
+            !incoming.contains_key(*document_id)
+                || incoming.get(*document_id).is_some_and(|page| {
+                    manifest
+                        .documents
+                        .get(*document_id)
+                        .is_some_and(|previous| previous.content_hash != page.content_hash)
+                })
+        }) {
+            writer.delete_term(Term::from_field_text(self.fields.document_id, document_id));
+        }
+        if legacy_index {
+            // The legacy delete_all above already removed unknown IDs; this loop is intentionally empty.
+        }
+        for (document_id, page) in &incoming {
+            let needs_write = manifest
+                .documents
+                .get(document_id)
+                .is_none_or(|previous| previous.content_hash != page.content_hash);
+            if needs_write {
+                let document = (*page).clone().with_generation(generation);
+                writer.add_document(self.to_document(&document))?;
+            }
         }
         writer.commit()?;
         self.reader.reload()?;
-        Ok(())
+
+        manifest.generation = generation;
+        manifest.documents = incoming
+            .into_iter()
+            .map(|(document_id, page)| {
+                (
+                    document_id,
+                    ManifestDocument {
+                        content_hash: page.content_hash.clone(),
+                        generation,
+                    },
+                )
+            })
+            .collect();
+        persist_manifest(&self.manifest_path, &manifest)?;
+        self.generation.store(generation, Ordering::Release);
+        Ok(report)
     }
 
     /// Search indexed title/content with bounded pagination and stored metadata.
@@ -169,6 +258,8 @@ impl SearchEngine {
         for (score, address) in top_docs {
             let document = searcher.doc::<TantivyDocument>(address)?;
             results.push(SearchHit {
+                document_id: first_text(&document, self.fields.document_id),
+                mapping_id: first_text(&document, self.fields.mapping_id),
                 url: first_text(&document, self.fields.url),
                 title: first_text(&document, self.fields.title),
                 snippet: first_text(&document, self.fields.content)
@@ -180,6 +271,10 @@ impl SearchEngine {
                     .get_all(self.fields.image_url)
                     .filter_map(|value| value.as_str().map(ToOwned::to_owned))
                     .collect(),
+                content_hash: first_text(&document, self.fields.content_hash),
+                generation: first_text(&document, self.fields.generation)
+                    .parse()
+                    .unwrap_or_default(),
                 score,
             });
         }
@@ -188,6 +283,7 @@ impl SearchEngine {
             offset,
             limit,
             total,
+            generation: self.generation()?,
             results,
         })
     }
@@ -200,13 +296,22 @@ impl SearchEngine {
             .search(&tantivy::query::AllQuery, &Count)?)
     }
 
-    fn to_document(&self, page: &IndexPage) -> TantivyDocument {
-        let mut document = doc!(
-            self.fields.url => page.url.as_str(),
-            self.fields.title => page.title.as_str(),
-            self.fields.content => page.body.as_str(),
-            self.fields.updated_at => page.updated_at.as_str(),
-        );
+    /// Return the last committed logical catalog generation.
+    pub fn generation(&self) -> AppResult<u64> {
+        Ok(self.generation.load(Ordering::Acquire))
+    }
+
+    fn to_document(&self, page: &SearchDocument) -> TantivyDocument {
+        let mut document = TantivyDocument::default();
+        document.add_text(self.fields.document_id, &page.document_id);
+        document.add_text(self.fields.mapping_id, &page.mapping_id);
+        document.add_text(self.fields.source, &page.source);
+        document.add_text(self.fields.url, &page.url);
+        document.add_text(self.fields.title, &page.title);
+        document.add_text(self.fields.content, &page.body);
+        document.add_text(self.fields.updated_at, &page.updated_at);
+        document.add_text(self.fields.content_hash, &page.content_hash);
+        document.add_text(self.fields.generation, page.generation.to_string());
         if let Some(graph) = &page.graph {
             document.add_text(self.fields.graph, graph);
         }
@@ -217,47 +322,12 @@ impl SearchEngine {
     }
 }
 
-/// Build stored fields and jieba-backed text fields for the MVP schema.
-fn build_schema() -> (Schema, SearchFields) {
-    let mut builder = Schema::builder();
-    let text_options = TextOptions::default()
-        .set_indexing_options(
-            TextFieldIndexing::default()
-                .set_tokenizer("jieba_search")
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-        )
-        .set_stored();
-    let url = builder.add_text_field("url", STRING | STORED);
-    let title = builder.add_text_field("title", text_options.clone());
-    let content = builder.add_text_field("content", text_options);
-    let updated_at = builder.add_text_field("updated_at", STRING | STORED);
-    let image_url = builder.add_text_field("image_url", STRING | STORED);
-    let graph = builder.add_text_field("graph", STRING | STORED);
-    let schema = builder.build();
-    (
-        schema,
-        SearchFields {
-            url,
-            title,
-            content,
-            updated_at,
-            image_url,
-            graph,
-        },
-    )
-}
-
-fn first_text(document: &TantivyDocument, field: Field) -> String {
-    document
-        .get_first(field)
-        .and_then(|value| value.as_str())
-        .unwrap_or_default()
-        .to_string()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::JiebaTokenizer;
+    use tempfile::tempdir;
+
+    use super::{JiebaTokenizer, SearchEngine};
+    use crate::core::document::SearchDocument;
     use tantivy::tokenizer::{TokenStream, Tokenizer};
 
     #[test]
@@ -269,5 +339,63 @@ mod tests {
             terms.push(stream.token().text.clone());
         }
         assert!(terms.iter().any(|term| term == "动态"));
+    }
+
+    #[test]
+    fn unchanged_sync_keeps_generation_and_changed_sync_increments_it() {
+        let directory = tempdir().unwrap();
+        let engine = SearchEngine::open(directory.path()).unwrap();
+        let page = SearchDocument::new(
+            "mapping",
+            "content.fon",
+            "/stable",
+            "Stable",
+            "Initial body",
+            "2026-08-30",
+            Vec::new(),
+            None,
+        );
+        let first = engine.sync_documents(std::slice::from_ref(&page)).unwrap();
+        assert_eq!(first.generation, 1);
+        assert_eq!(first.added, 1);
+        let unchanged = engine.sync_documents(std::slice::from_ref(&page)).unwrap();
+        assert_eq!(unchanged.generation, 1);
+        assert_eq!(unchanged.unchanged, 1);
+        let changed = SearchDocument::new(
+            "mapping",
+            "content.fon",
+            "/stable",
+            "Stable",
+            "Changed body",
+            "2026-08-30",
+            Vec::new(),
+            None,
+        );
+        let second = engine
+            .sync_documents(std::slice::from_ref(&changed))
+            .unwrap();
+        assert_eq!(second.generation, 2);
+        assert_eq!(second.updated, 1);
+        assert_eq!(engine.document_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn missing_authoritative_document_is_deleted() {
+        let directory = tempdir().unwrap();
+        let engine = SearchEngine::open(directory.path()).unwrap();
+        let page = SearchDocument::new(
+            "mapping",
+            "content.fon",
+            "/to-delete",
+            "Delete me",
+            "Body",
+            "2026-08-30",
+            Vec::new(),
+            None,
+        );
+        engine.sync_documents(std::slice::from_ref(&page)).unwrap();
+        let report = engine.sync_documents(&[]).unwrap();
+        assert_eq!(report.deleted, 1);
+        assert_eq!(engine.document_count().unwrap(), 0);
     }
 }

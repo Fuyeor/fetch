@@ -1,6 +1,6 @@
-# apps/fetch/back-end/Cargo.toml
+# apps/engine/Cargo.toml
 [package]
-name = "fetch-backend"
+name = "fetch-engine"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.86"
@@ -12,6 +12,7 @@ fon-parser = { git = "https://github.com/Fuyeor/fon-parser.git", branch = "main"
 jieba-rs = "0.10.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10"
 tantivy = "0.26.1"
 tokio = { version = "1.48", features = ["macros", "net", "rt-multi-thread"] }
 

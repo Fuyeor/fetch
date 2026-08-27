@@ -1,26 +1,19 @@
-// apps/fetch/back-end/src/model.rs
+// apps/engine/src/model.rs
 
 use serde::Serialize;
-
-/// A page materialized from one finite sitemap binding.
-#[derive(Debug, Clone)]
-pub struct IndexPage {
-    pub url: String,
-    pub title: String,
-    pub body: String,
-    pub updated_at: String,
-    pub images: Vec<String>,
-    pub graph: Option<String>,
-}
 
 /// A search hit returned by the public API and rendered by the CSR client.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchHit {
+    pub document_id: String,
+    pub mapping_id: String,
     pub url: String,
     pub title: String,
     pub snippet: String,
     pub updated_at: String,
     pub images: Vec<String>,
+    pub content_hash: String,
+    pub generation: u64,
     pub score: f32,
 }
 
@@ -31,6 +24,7 @@ pub struct SearchResponse {
     pub offset: usize,
     pub limit: usize,
     pub total: usize,
+    pub generation: u64,
     pub results: Vec<SearchHit>,
 }
 
@@ -39,13 +33,19 @@ pub struct SearchResponse {
 pub struct IndexStatus {
     pub documents: usize,
     pub mappings: usize,
+    pub generation: u64,
     pub last_rebuilt_at: String,
 }
 
-/// Result of one complete mock sitemap ingestion.
+/// Result of one complete sitemap ingestion.
 #[derive(Debug, Clone, Serialize)]
 pub struct RebuildReport {
     pub mappings: usize,
     pub rows: usize,
     pub documents: usize,
+    pub generation: u64,
+    pub added: usize,
+    pub updated: usize,
+    pub deleted: usize,
+    pub unchanged: usize,
 }

@@ -14,14 +14,19 @@ export interface SearchResults {
   offset: number;
   limit: number;
   total: number;
+  generation: number;
   results: SearchItem[];
 }
 
 export interface SearchItem {
+  document_id: string;
+  mapping_id: string;
   url: string;
   title: string;
   snippet: string;
   updated_at: string;
   images: string[];
+  content_hash: string;
+  generation: number;
   score: number;
 }

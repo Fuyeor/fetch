@@ -1,11 +1,11 @@
-// apps/fetch/back-end/src/web.rs
+// apps/engine/src/web.rs
 
 use std::sync::{Arc, RwLock};
 
 use axum::Router;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
-use axum::response::{Html, IntoResponse, Json, Response};
+use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
 use serde::Deserialize;
 
@@ -37,10 +37,9 @@ impl AppState {
     }
 }
 
-/// Build the public API and CSR shell routes.
+/// Build the data-plane API; gateway version prefixes are intentionally outside this router.
 pub fn router(state: AppState) -> Router {
     Router::new()
-        .route("/", get(index_page))
         .route("/search", get(search))
         .route("/index/status", get(index_status))
         .route("/index/rebuild", post(rebuild_index))
@@ -67,7 +66,7 @@ async fn search(
     Ok(Json(response))
 }
 
-/// Report the number of currently searchable documents.
+/// Report the number of currently searchable documents and the published generation.
 async fn index_status(State(state): State<AppState>) -> Result<Json<IndexStatus>, ApiError> {
     let metadata = state
         .metadata
@@ -76,14 +75,15 @@ async fn index_status(State(state): State<AppState>) -> Result<Json<IndexStatus>
     Ok(Json(IndexStatus {
         documents: state.engine.document_count()?,
         mappings: metadata.mappings,
+        generation: state.engine.generation()?,
         last_rebuilt_at: metadata.last_rebuilt_at.clone(),
     }))
 }
 
-/// Rebuild the local mock index from the three FON resources.
+/// Apply the local finite FON catalog without crossing site boundaries or crawling remote pages.
 async fn rebuild_index(State(state): State<AppState>) -> Result<Json<RebuildReport>, ApiError> {
     let catalog = load_catalog(&state.mock_root)?;
-    state.engine.replace_all(&catalog.pages)?;
+    let sync = state.engine.sync_documents(&catalog.pages)?;
     let mut metadata = state
         .metadata
         .write()
@@ -94,6 +94,11 @@ async fn rebuild_index(State(state): State<AppState>) -> Result<Json<RebuildRepo
         mappings: catalog.mappings.len(),
         rows: catalog.pages.len(),
         documents: catalog.pages.len(),
+        generation: sync.generation,
+        added: sync.added,
+        updated: sync.updated,
+        deleted: sync.deleted,
+        unchanged: sync.unchanged,
     }))
 }
 
@@ -102,11 +107,6 @@ fn unix_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs())
-}
-
-/// Serve a dependency-free CSR mock console so the backend can be tested in a browser.
-async fn index_page() -> Html<&'static str> {
-    Html(include_str!("../../../web/index.html"))
 }
 
 /// Convert internal failures into one JSON error shape without leaking implementation details.
@@ -170,6 +170,27 @@ mod tests {
         let rebuild_json: serde_json::Value =
             serde_json::from_slice(&rebuild_body).expect("rebuild body must be JSON");
         assert_eq!(rebuild_json["documents"], 5);
+        assert_eq!(rebuild_json["added"], 5);
+        assert_eq!(rebuild_json["generation"], 1);
+
+        let unchanged = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/index/rebuild")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("second rebuild response must be returned");
+        let unchanged_body = to_bytes(unchanged.into_body(), usize::MAX)
+            .await
+            .expect("second rebuild body must be readable");
+        let unchanged_json: serde_json::Value =
+            serde_json::from_slice(&unchanged_body).expect("second rebuild body must be JSON");
+        assert_eq!(unchanged_json["unchanged"], 5);
+        assert_eq!(unchanged_json["generation"], 1);
 
         let search = app
             .oneshot(
@@ -187,6 +208,7 @@ mod tests {
         let search_json: serde_json::Value =
             serde_json::from_slice(&search_body).expect("search body must be JSON");
         assert_eq!(search_json["total"], 2);
+        assert_eq!(search_json["generation"], 1);
         assert!(
             search_json["results"][0]["url"]
                 .as_str()

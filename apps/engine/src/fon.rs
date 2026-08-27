@@ -1,17 +1,21 @@
-// apps/fetch/back-end/src/fon.rs
+// apps/engine/src/fon.rs
 
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
-use fon_parser::{Ast, Member, StringPartKind, Value, parse};
+use fon_parser::{SchemaKind, Value, parse};
 
-use crate::model::IndexPage;
-
-type AppResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+use crate::core::ast::{
+    CoreResult, RuntimeValue, object_field_value, object_path_field, object_string_field,
+    parse_root_value,
+};
+use crate::core::document::{SearchDocument, stable_mapping_id};
+use crate::core::pattern::{expand_pattern, placeholder_names};
 
 /// Describes one pattern-to-sitemap mapping declared by the site.
 #[derive(Debug, Clone)]
 pub struct MappingSpec {
+    pub id: String,
     pub pattern: String,
     pub datas: PathBuf,
 }
@@ -20,11 +24,11 @@ pub struct MappingSpec {
 #[derive(Debug, Clone)]
 pub struct LoadedCatalog {
     pub mappings: Vec<MappingSpec>,
-    pub pages: Vec<IndexPage>,
+    pub pages: Vec<SearchDocument>,
 }
 
 /// Load the three-file mock protocol from a local site root.
-pub fn load_catalog(root: &Path) -> AppResult<LoadedCatalog> {
+pub fn load_catalog(root: &Path) -> CoreResult<LoadedCatalog> {
     let mapping_path = resolve_site_path(root, Path::new("./well-known/search-patterns.fon"))?;
     let mapping_source = std::fs::read_to_string(&mapping_path)?;
     let mappings = parse_mappings(&mapping_source, &mapping_path)?;
@@ -46,7 +50,7 @@ pub fn load_catalog(root: &Path) -> AppResult<LoadedCatalog> {
 }
 
 /// Parse and semantically inspect the mapping index while preserving schema syntax.
-fn parse_mappings(source: &str, path: &Path) -> AppResult<Vec<MappingSpec>> {
+fn parse_mappings(source: &str, path: &Path) -> CoreResult<Vec<MappingSpec>> {
     let result = parse(source);
     if result.has_errors() {
         return Err(format!(
@@ -62,6 +66,7 @@ fn parse_mappings(source: &str, path: &Path) -> AppResult<Vec<MappingSpec>> {
         .root_array_items()
         .ok_or_else(|| format!("{} must contain a root array", path.display()))?;
     let mut mappings = Vec::with_capacity(item_ids.len());
+    let mut mapping_ids = BTreeSet::new();
 
     for item_id in item_ids {
         let value = result
@@ -78,10 +83,42 @@ fn parse_mappings(source: &str, path: &Path) -> AppResult<Vec<MappingSpec>> {
             .ok_or_else(|| "mapping.datas is required".to_string())?;
         let params = object_field_value(&result.document.ast, &object.members, "params")
             .ok_or_else(|| "mapping.params is required".to_string())?;
-        if !matches!(params, Value::Schema(_)) {
-            return Err("mapping.params must be a struct or enum schema".into());
+        let placeholders = placeholder_names(&pattern)?;
+        let Value::Schema(schema_value) = params else {
+            return Err("mapping.params must be a struct schema".into());
+        };
+        if schema_value.kind != SchemaKind::Struct {
+            return Err("mapping.params must be a struct schema".into());
+        }
+        let schema = result
+            .document
+            .ast
+            .schema(schema_value.schema)
+            .ok_or_else(|| "mapping.params references an invalid schema".to_string())?;
+        let declared = schema
+            .fields
+            .iter()
+            .map(|field| field.key.raw.as_str())
+            .collect::<BTreeSet<_>>();
+        if declared.len() != schema.fields.len() {
+            return Err("mapping.params contains duplicate fields".into());
+        }
+        if declared
+            .iter()
+            .any(|name| !placeholders.iter().any(|placeholder| placeholder == *name))
+            || placeholders
+                .iter()
+                .any(|name| !declared.contains(name.as_str()))
+        {
+            return Err("mapping.params fields must exactly match pattern placeholders".into());
+        }
+        let id = object_string_field(&result.document.ast, &object.members, "id")?
+            .unwrap_or_else(|| stable_mapping_id(&pattern, &datas));
+        if id.trim().is_empty() || !mapping_ids.insert(id.clone()) {
+            return Err("mapping ids must be non-empty and unique".into());
         }
         mappings.push(MappingSpec {
+            id,
             pattern,
             datas: PathBuf::from(datas),
         });
@@ -95,7 +132,7 @@ fn materialize_row(
     root: &Path,
     mapping: &MappingSpec,
     row: &RuntimeValue,
-) -> AppResult<Vec<IndexPage>> {
+) -> CoreResult<Vec<SearchDocument>> {
     let RuntimeValue::Object(object) = row else {
         return Err("each sitemap row must be an object".into());
     };
@@ -120,13 +157,17 @@ fn materialize_row(
 
     Ok(urls
         .into_iter()
-        .map(|url| IndexPage {
-            url,
-            title: choose_title(content.title.as_deref(), &content.body),
-            body: content.body.clone(),
-            updated_at: updated_at.clone(),
-            images: content.images.clone(),
-            graph: content.graph.clone(),
+        .map(|url| {
+            SearchDocument::new(
+                mapping.id.clone(),
+                content_reference.clone(),
+                url,
+                choose_title(content.title.as_deref(), &content.body),
+                content.body.clone(),
+                updated_at.clone(),
+                content.images.clone(),
+                content.graph.clone(),
+            )
         })
         .collect())
 }
@@ -141,7 +182,7 @@ struct ContentPage {
 }
 
 /// Parse content FON without interpreting HTML; content remains plain text/Markdown.
-fn parse_content(path: &Path) -> AppResult<ContentPage> {
+fn parse_content(path: &Path) -> CoreResult<ContentPage> {
     let source = std::fs::read_to_string(path)?;
     let value = parse_root_value(&source, path)?;
     let RuntimeValue::Object(object) = value else {
@@ -196,92 +237,7 @@ pub fn choose_title(explicit: Option<&str>, content: &str) -> String {
         .join(" ")
 }
 
-/// Expand scalar, optional and array bindings without enumerating an unbounded space.
-fn expand_pattern(
-    pattern: &str,
-    params: &BTreeMap<String, RuntimeValue>,
-) -> AppResult<Vec<String>> {
-    let mut variants = vec![String::new()];
-    let mut cursor = 0;
-    while let Some(open_offset) = pattern[cursor..].find('{') {
-        let open = cursor + open_offset;
-        let close = pattern[open..]
-            .find('}')
-            .map(|offset| open + offset)
-            .ok_or_else(|| "pattern contains an unterminated parameter".to_string())?;
-        let name = &pattern[open + 1..close];
-        let prefix = &pattern[cursor..open];
-        let value = params.get(name);
-        let optional_terminal = value.is_none() && is_terminal_segment(pattern, open, close);
-        let replacements = match value {
-            Some(RuntimeValue::Array(values)) => values
-                .iter()
-                .map(path_value)
-                .collect::<AppResult<Vec<_>>>()?,
-            Some(value) => vec![path_value(value)?],
-            None if optional_terminal => vec![String::new()],
-            None => return Err(format!("missing non-terminal parameter: {name}").into()),
-        };
-        let prefix = if optional_terminal {
-            prefix.trim_end_matches('/')
-        } else {
-            prefix
-        };
-        variants = variants
-            .into_iter()
-            .flat_map(|base| {
-                replacements
-                    .iter()
-                    .map(move |replacement| format!("{base}{prefix}{replacement}"))
-            })
-            .collect();
-        cursor = close + 1;
-    }
-    let suffix = &pattern[cursor..];
-    Ok(variants
-        .into_iter()
-        .map(|value| canonical_path(&format!("{value}{suffix}")))
-        .collect())
-}
-
-/// Detect a missing placeholder at the end of a path segment.
-fn is_terminal_segment(pattern: &str, open: usize, close: usize) -> bool {
-    pattern[..open].ends_with('/') && close + 1 == pattern.len()
-}
-
-/// Percent-encode one path value while keeping unreserved URI characters intact.
-fn percent_encode_segment(value: &str) -> String {
-    let mut output = String::with_capacity(value.len());
-    for byte in value.as_bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
-            output.push(*byte as char);
-        } else {
-            output.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    output
-}
-
-fn path_value(value: &RuntimeValue) -> AppResult<String> {
-    match value {
-        RuntimeValue::String(value) | RuntimeValue::Unknown(value) | RuntimeValue::Enum(value) => {
-            Ok(percent_encode_segment(value))
-        }
-        RuntimeValue::Number(value) => Ok(percent_encode_segment(value)),
-        RuntimeValue::Boolean(value) => Ok(value.to_string()),
-        _ => Err("path parameters must be scalar strings, numbers, booleans, or arrays".into()),
-    }
-}
-
-fn canonical_path(value: &str) -> String {
-    if value.starts_with('/') {
-        value.to_string()
-    } else {
-        format!("/{value}")
-    }
-}
-
-fn resolve_site_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
+fn resolve_site_path(root: &Path, path: &Path) -> CoreResult<PathBuf> {
     let relative = path.strip_prefix("./").unwrap_or(path);
     if relative.is_absolute()
         || relative
@@ -293,198 +249,11 @@ fn resolve_site_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
     Ok(root.join(relative))
 }
 
-fn object_string_field(
-    ast: &Ast,
-    members: &[fon_parser::MemberId],
-    name: &str,
-) -> AppResult<Option<String>> {
-    let Some(value) = object_field_value(ast, members, name) else {
-        return Ok(None);
-    };
-    match value {
-        Value::String(value) => Ok(Some(unquote_string(&value.raw))),
-        _ => Err(format!("{name} must be a FON string").into()),
-    }
-}
-
-fn object_path_field(
-    ast: &Ast,
-    members: &[fon_parser::MemberId],
-    name: &str,
-) -> AppResult<Option<String>> {
-    let Some(value) = object_field_value(ast, members, name) else {
-        return Ok(None);
-    };
-    match value {
-        Value::Unknown(value) => Ok(Some(value.raw.clone())),
-        Value::String(value) => Ok(Some(unquote_string(&value.raw))),
-        _ => Err(format!("{name} must be a FON path or string").into()),
-    }
-}
-
-fn object_field_value<'a>(
-    ast: &'a Ast,
-    members: &[fon_parser::MemberId],
-    name: &str,
-) -> Option<&'a Value> {
-    members.iter().find_map(|id| {
-        let binding = ast.member(*id).and_then(Member::binding)?;
-        (binding.key.raw == name)
-            .then(|| ast.value(binding.value))
-            .flatten()
-    })
-}
-
-fn unquote_string(raw: &str) -> String {
-    let value = raw
-        .strip_prefix('`')
-        .and_then(|value| value.strip_suffix('`'))
-        .unwrap_or(raw);
-    let mut output = String::with_capacity(value.len());
-    let mut chars = value.chars();
-    while let Some(character) = chars.next() {
-        if character != '\\' {
-            output.push(character);
-            continue;
-        }
-        match chars.next() {
-            Some('n') => output.push('\n'),
-            Some('r') => output.push('\r'),
-            Some('t') => output.push('\t'),
-            Some('`') => output.push('`'),
-            Some('\\') => output.push('\\'),
-            Some(other) => {
-                output.push('\\');
-                output.push(other);
-            }
-            None => output.push('\\'),
-        }
-    }
-    output
-}
-
-/// Convert parsed AST values into a small, explicit runtime representation.
-#[derive(Debug, Clone)]
-enum RuntimeValue {
-    Boolean(bool),
-    Number(String),
-    String(String),
-    Enum(String),
-    Array(Vec<RuntimeValue>),
-    Object(BTreeMap<String, RuntimeValue>),
-    Unknown(String),
-}
-
-impl RuntimeValue {
-    fn as_string(&self) -> String {
-        match self {
-            Self::Boolean(value) => value.to_string(),
-            Self::Number(value)
-            | Self::String(value)
-            | Self::Enum(value)
-            | Self::Unknown(value) => value.clone(),
-            Self::Array(_) | Self::Object(_) => String::new(),
-        }
-    }
-
-    fn as_array(&self) -> Option<&[RuntimeValue]> {
-        match self {
-            Self::Array(values) => Some(values),
-            _ => None,
-        }
-    }
-}
-
-fn parse_root_value(source: &str, path: &Path) -> AppResult<RuntimeValue> {
-    let result = parse(source);
-    if result.has_errors() {
-        return Err(format!("invalid FON {}: {:?}", path.display(), result.diagnostics).into());
-    }
-    if let Some(items) = result.document.ast.root_array_items() {
-        let values = items
-            .iter()
-            .map(|id| value_to_runtime(&result.document.ast, *id))
-            .collect::<AppResult<Vec<_>>>()?;
-        return Ok(RuntimeValue::Array(values));
-    }
-    let members = result
-        .document
-        .ast
-        .object_members()
-        .ok_or_else(|| format!("{} has no supported root", path.display()))?;
-    let mut object = BTreeMap::new();
-    for member_id in members {
-        let member = result
-            .document
-            .ast
-            .member(*member_id)
-            .ok_or_else(|| "invalid member reference".to_string())?;
-        let binding = member
-            .binding()
-            .ok_or_else(|| "data objects cannot contain type declarations".to_string())?;
-        let value = value_to_runtime(&result.document.ast, binding.value)?;
-        if object.insert(binding.key.raw.clone(), value).is_some() {
-            return Err(format!("duplicate FON field: {}", binding.key.raw).into());
-        }
-    }
-    Ok(RuntimeValue::Object(object))
-}
-
-fn value_to_runtime(ast: &Ast, value_id: fon_parser::ValueId) -> AppResult<RuntimeValue> {
-    let value = ast
-        .value(value_id)
-        .ok_or_else(|| "invalid value reference".to_string())?;
-    match value {
-        Value::Boolean { value, .. } => Ok(RuntimeValue::Boolean(*value)),
-        Value::Number { raw, .. } => Ok(RuntimeValue::Number(raw.clone())),
-        Value::String(value) => {
-            if value
-                .parts
-                .iter()
-                .any(|part| part.kind == StringPartKind::Interpolation)
-            {
-                return Err("FON interpolation is not allowed in data files".into());
-            }
-            Ok(RuntimeValue::String(unquote_string(&value.raw)))
-        }
-        Value::EnumPath(value) => Ok(RuntimeValue::Enum(
-            value.path.trim_start_matches('.').to_string(),
-        )),
-        Value::Array(value) => Ok(RuntimeValue::Array(
-            value
-                .items
-                .iter()
-                .map(|id| value_to_runtime(ast, *id))
-                .collect::<AppResult<Vec<_>>>()?,
-        )),
-        Value::Object(value) => {
-            let mut object = BTreeMap::new();
-            for member_id in &value.members {
-                let member = ast
-                    .member(*member_id)
-                    .ok_or_else(|| "invalid nested member reference".to_string())?;
-                let binding = member.binding().ok_or_else(|| {
-                    "nested data objects cannot contain type declarations".to_string()
-                })?;
-                let nested = value_to_runtime(ast, binding.value)?;
-                if object.insert(binding.key.raw.clone(), nested).is_some() {
-                    return Err(format!("duplicate FON field: {}", binding.key.raw).into());
-                }
-            }
-            Ok(RuntimeValue::Object(object))
-        }
-        Value::Unknown(value) => Ok(RuntimeValue::Unknown(value.raw.clone())),
-        Value::Regex(_) | Value::Schema(_) | Value::Expression(_) | Value::Error(_) => {
-            Err("unsupported executable or schema value in data file".into())
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
-    use super::{choose_title, load_catalog};
+    use super::{choose_title, load_catalog, parse_mappings};
 
     #[test]
     fn loads_repository_mock_catalog() {
@@ -492,6 +261,9 @@ mod tests {
         let catalog = load_catalog(&root).expect("repository mock catalog must load");
         assert_eq!(catalog.mappings.len(), 3);
         assert_eq!(catalog.pages.len(), 5);
+        assert_eq!(catalog.mappings[0].id, "profile");
+        assert_eq!(catalog.mappings[1].id, "user-tab");
+        assert_eq!(catalog.mappings[2].id, "thought");
         assert!(
             catalog
                 .pages
@@ -499,6 +271,35 @@ mod tests {
                 .any(|page| page.url == "/zh-hans/thought/1001")
         );
         assert!(catalog.pages.iter().all(|page| page.images.len() == 1));
+        assert!(
+            catalog
+                .pages
+                .iter()
+                .all(|page| page.document_id.starts_with("doc_"))
+        );
+        assert!(
+            catalog
+                .pages
+                .iter()
+                .all(|page| page.content_hash.starts_with("sha256:"))
+        );
+    }
+
+    #[test]
+    fn duplicate_mapping_ids_are_rejected() {
+        let source = r#"[
+          { id = `same` pattern = `/{username}` params = struct { username: string } datas = ./a.fon }
+          { id = `same` pattern = `/{locale}` params = struct { locale: string } datas = ./b.fon }
+        ]"#;
+        assert!(parse_mappings(source, std::path::Path::new("mappings.fon")).is_err());
+    }
+
+    #[test]
+    fn mapping_params_must_match_pattern_placeholders() {
+        let source = r#"[
+          { id = `profile` pattern = `/{username}` params = struct { account: string } datas = ./a.fon }
+        ]"#;
+        assert!(parse_mappings(source, std::path::Path::new("mappings.fon")).is_err());
     }
 
     #[test]
