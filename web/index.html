@@ -1,0 +1,201 @@
+<!-- web/index.html -->
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fetch · SPP Search</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #111318;
+        color: #f4f6fb;
+        --muted: #9399a8;
+        --panel: #1a1e27;
+        --line: #2d3442;
+        --accent: #8ed2c1;
+        --accent-strong: #c3f1e6;
+      }
+
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; background: radial-gradient(circle at 10% 0%, #202a32 0, transparent 35%), #111318; }
+      main { width: min(960px, calc(100% - 32px)); margin: 0 auto; padding: 64px 0 96px; }
+      header { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 42px; }
+      .eyebrow { color: var(--accent); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; }
+      h1 { margin: 8px 0 0; font-size: clamp(36px, 7vw, 72px); line-height: .95; letter-spacing: -.06em; }
+      .lede { max-width: 440px; color: var(--muted); line-height: 1.6; }
+      .search-shell { display: flex; gap: 10px; padding: 8px; border: 1px solid var(--line); border-radius: 18px; background: color-mix(in srgb, var(--panel) 92%, transparent); box-shadow: 0 20px 60px #0005; }
+      input { min-width: 0; flex: 1; border: 0; outline: 0; border-radius: 12px; padding: 14px 16px; background: transparent; color: inherit; font: inherit; }
+      button { border: 0; border-radius: 12px; padding: 0 18px; background: var(--accent); color: #10231f; font: inherit; font-weight: 700; cursor: pointer; transition: transform 160ms ease-out, background 160ms ease-out; }
+      button:hover { background: var(--accent-strong); }
+      button:active { transform: scale(.97); }
+      button:disabled { cursor: wait; opacity: .55; }
+      .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 24px 0 12px; color: var(--muted); font-size: 13px; }
+      .toolbar button { min-height: 38px; background: transparent; border: 1px solid var(--line); color: var(--accent-strong); }
+      #results { display: grid; gap: 12px; }
+      article { padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: #171b23dd; }
+      article h2 { margin: 0 0 8px; font-size: 20px; letter-spacing: -.02em; }
+      article h2 a { color: var(--accent-strong); text-decoration: none; }
+      article h2 a:hover { text-decoration: underline; }
+      .url, .meta, .images { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+      .url { margin-bottom: 14px; }
+      .snippet { margin: 0; color: #d9dde7; line-height: 1.65; white-space: pre-wrap; }
+      .meta { display: flex; gap: 12px; margin-top: 16px; }
+      .images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+      .images a { color: var(--accent); }
+      #sentinel { height: 56px; display: grid; place-items: center; color: var(--muted); font-size: 13px; }
+      .empty { padding: 48px 0; color: var(--muted); text-align: center; }
+      @media (max-width: 680px) { main { padding-top: 36px; } header { display: block; } .lede { margin-top: 20px; } .search-shell { margin-top: 28px; } }
+      @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <div class="eyebrow">Fuyeor · Search Patterns Protocol</div>
+          <h1>Fetch</h1>
+        </div>
+        <p class="lede">一个以 FON sitemap 为入口、以 Markdown 为内容、由 Tantivy 和 jieba-rs 驱动的 CSR 搜索 mock。</p>
+      </header>
+
+      <form class="search-shell" id="search-form">
+        <input id="query" name="q" type="search" placeholder="搜索 Fuyeor、思考、评论……" autocomplete="off" />
+        <button type="submit">搜索</button>
+      </form>
+
+      <div class="toolbar">
+        <span id="status">等待索引</span>
+        <button id="rebuild" type="button">重建 mock 索引</button>
+      </div>
+
+      <section id="results" aria-live="polite"></section>
+      <div id="sentinel">输入关键词开始搜索</div>
+    </main>
+
+    <script>
+      // web/index.html
+      const state = { query: "", offset: 0, limit: 10, total: 0, loading: false, hasMore: true };
+      const results = window.document.querySelector("#results");
+      const status = window.document.querySelector("#status");
+      const sentinel = window.document.querySelector("#sentinel");
+      const form = window.document.querySelector("#search-form");
+      const queryInput = window.document.querySelector("#query");
+      const rebuildButton = window.document.querySelector("#rebuild");
+
+      function setStatus(text) { status.textContent = text; }
+
+      function renderHit(hit) {
+        const article = window.document.createElement("article");
+        const heading = window.document.createElement("h2");
+        const link = window.document.createElement("a");
+        link.href = hit.url;
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        link.textContent = hit.title || hit.url;
+        heading.append(link);
+        article.append(heading);
+
+        const url = window.document.createElement("div");
+        url.className = "url";
+        url.textContent = hit.url;
+        article.append(url);
+
+        const snippet = window.document.createElement("p");
+        snippet.className = "snippet";
+        snippet.textContent = hit.snippet;
+        article.append(snippet);
+
+        const meta = window.document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = `更新于 ${hit.updated_at || "未知"} · 相关度 ${hit.score.toFixed(3)}`;
+        article.append(meta);
+
+        if (hit.images.length > 0) {
+          const images = window.document.createElement("div");
+          images.className = "images";
+          for (const image of hit.images) {
+            const imageLink = window.document.createElement("a");
+            imageLink.href = image;
+            imageLink.target = "_blank";
+            imageLink.rel = "noreferrer";
+            imageLink.textContent = `图片指针：${image}`;
+            images.append(imageLink);
+          }
+          article.append(images);
+        }
+        return article;
+      }
+
+      async function loadResults(reset = false) {
+        if (state.loading || (!state.hasMore && !reset)) return;
+        state.loading = true;
+        if (reset) {
+          state.offset = 0;
+          state.total = 0;
+          state.hasMore = true;
+          results.replaceChildren();
+        }
+        const searchButton = form.querySelector("button");
+        searchButton.disabled = true;
+        setStatus(state.query ? `正在搜索“${state.query}”…` : "请输入关键词");
+        try {
+          if (!state.query) {
+            sentinel.textContent = "输入关键词开始搜索";
+            return;
+          }
+          const params = new window.URLSearchParams({ q: state.query, offset: String(state.offset), limit: String(state.limit) });
+          const response = await window.fetch(`/api/v1/search?${params}`);
+          if (!response.ok) throw new Error(`search failed: ${response.status}`);
+          const payload = await response.json();
+          state.total = payload.total;
+          for (const hit of payload.results) results.append(renderHit(hit));
+          state.offset += payload.results.length;
+          state.hasMore = state.offset < state.total;
+          setStatus(`${state.total} 个结果 · 已加载 ${state.offset}`);
+          sentinel.textContent = state.hasMore ? "向下滚动加载更多" : "已经到底了";
+          if (state.total === 0) {
+            const empty = window.document.createElement("div");
+            empty.className = "empty";
+            empty.textContent = "没有找到匹配内容";
+            results.append(empty);
+          }
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : "搜索失败");
+          sentinel.textContent = "搜索请求失败，请重试";
+        } finally {
+          state.loading = false;
+          searchButton.disabled = false;
+        }
+      }
+
+      async function rebuildIndex() {
+        rebuildButton.disabled = true;
+        setStatus("正在读取 FON sitemap 并重建索引…");
+        try {
+          const response = await window.fetch("/api/v1/index/rebuild", { method: "POST" });
+          if (!response.ok) throw new Error(`rebuild failed: ${response.status}`);
+          const report = await response.json();
+          setStatus(`已索引 ${report.documents} 个文档，来自 ${report.mappings} 个 mapping`);
+          if (state.query) await loadResults(true);
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : "重建失败");
+        } finally {
+          rebuildButton.disabled = false;
+        }
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        state.query = queryInput.value.trim();
+        void loadResults(true);
+      });
+      rebuildButton.addEventListener("click", () => { void rebuildIndex(); });
+      const observer = new window.IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadResults();
+      }, { rootMargin: "240px" });
+      observer.observe(sentinel);
+    </script>
+  </body>
+</html>
