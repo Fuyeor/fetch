@@ -1,5 +1,20 @@
+# apps/fetch/back-end/Cargo.toml
 [package]
 name = "fetch-backend"
+version = "0.1.0"
 edition = "2024"
+rust-version = "1.86"
+license = "MIT"
 
 [dependencies]
+axum = "0.8.9"
+fon-parser = { git = "https://github.com/Fuyeor/fon-parser.git", branch = "main", package = "fon-parser" }
+jieba-rs = "0.10.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tantivy = "0.26.1"
+tokio = { version = "1.48", features = ["macros", "net", "rt-multi-thread"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3.27.0"

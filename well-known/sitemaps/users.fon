@@ -1,0 +1,8 @@
+// well-known/sitemaps/users.fon
+[
+  {
+    params = { username = `Fuyeor` }
+    updated-at = `2026-08-30T08:30:00.000Z`
+    content = ./well-known/content/fuyeor-profile.fon
+  }
+]

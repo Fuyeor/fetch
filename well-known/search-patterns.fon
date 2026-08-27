@@ -1,0 +1,26 @@
+// well-known/search-patterns.fon
+[
+  {
+    pattern = `/@{username}`
+    params = struct {
+      username: string
+    }
+    datas = ./well-known/sitemaps/users.fon
+  }
+  {
+    pattern = `/@{username}/{tab}`
+    params = struct {
+      username: string
+      tab: enum { thoughts, comments }
+    }
+    datas = ./well-known/sitemaps/user-tabs.fon
+  }
+  {
+    pattern = `/{locale}/thought/{id}`
+    params = struct {
+      locale: enum { en, fr, es, zh-hans }
+      id: int
+    }
+    datas = ./well-known/sitemaps/thoughts.fon
+  }
+]

@@ -1,0 +1,13 @@
+// well-known/content/fuyeor-profile.fon
+title = `Fuyeor (@Fuyeor) « Profile « Ф`
+content = `# 关于 Fuyeor
+
+Fuyeor 是一个关注开放网络、FON、FRL 和 Search Patterns Protocol 的个人主页。`
+images = [
+  `https://fuyeor.com/assets/fuyeor-avatar.webp`
+]
+graph = {
+  type = .person
+  name = `Fuyeor`
+  description = `@Fuyeor on Ф social`
+}
