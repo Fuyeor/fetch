@@ -115,14 +115,25 @@ impl SearchEngine {
     pub fn open(index_path: &Path) -> AppResult<Self> {
         std::fs::create_dir_all(index_path)?;
         let manifest_path = index_path.join("manifest.json");
-        let initial_generation = load_manifest(&manifest_path)?.generation;
         let (new_schema, new_fields) = build_schema();
-        let (index, fields) = if index_path.join("meta.json").exists() {
+        let (initial_generation, index, fields) = if index_path.join("meta.json").exists() {
             let index = Index::open(MmapDirectory::open(index_path)?)?;
-            let fields = fields_from_schema(&index.schema())?;
-            (index, fields)
+            match fields_from_schema(&index.schema()) {
+                Ok(fields) => (load_manifest(&manifest_path)?.generation, index, fields),
+                Err(error) => {
+                    drop(index);
+                    quarantine_incompatible_index(index_path, error.as_ref())?;
+                    let index = Index::create_in_dir(index_path, new_schema.clone())?;
+                    (0, index, new_fields)
+                }
+            }
         } else {
-            (Index::create_in_dir(index_path, new_schema)?, new_fields)
+            let initial_generation = load_manifest(&manifest_path)?.generation;
+            (
+                initial_generation,
+                Index::create_in_dir(index_path, new_schema)?,
+                new_fields,
+            )
         };
         index.tokenizers().register(
             "jieba_search",
@@ -322,12 +333,49 @@ impl SearchEngine {
     }
 }
 
+/// Move an incompatible Tantivy directory aside before creating the current schema.
+fn quarantine_incompatible_index(
+    index_path: &Path,
+    error: &dyn std::error::Error,
+) -> AppResult<()> {
+    let parent = index_path
+        .parent()
+        .ok_or_else(|| "index path has no parent directory".to_string())?;
+    let name = index_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "index path has no valid directory name".to_string())?;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs());
+    let mut backup = parent.join(format!("{name}.incompatible-{timestamp}"));
+    let mut suffix = 0_u32;
+    while backup.exists() {
+        suffix = suffix.saturating_add(1);
+        backup = parent.join(format!("{name}.incompatible-{timestamp}-{suffix}"));
+    }
+    std::fs::rename(index_path, &backup).map_err(|rename_error| {
+        format!(
+            "incompatible Tantivy schema ({error}); failed to quarantine old index at {}: {rename_error}",
+            backup.display()
+        )
+    })?;
+    std::fs::create_dir_all(index_path)?;
+    eprintln!(
+        "Quarantined incompatible Tantivy index ({error}) at {}",
+        backup.display()
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::tempdir;
 
     use super::{JiebaTokenizer, SearchEngine};
     use crate::core::document::SearchDocument;
+    use tantivy::Index;
+    use tantivy::schema::{STORED, Schema};
     use tantivy::tokenizer::{TokenStream, Tokenizer};
 
     #[test]
@@ -377,6 +425,29 @@ mod tests {
         assert_eq!(second.generation, 2);
         assert_eq!(second.updated, 1);
         assert_eq!(engine.document_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn incompatible_schema_is_quarantined_and_recreated() {
+        let parent = tempdir().unwrap();
+        let index_path = parent.path().join("index");
+        std::fs::create_dir_all(&index_path).unwrap();
+        let mut schema_builder = Schema::builder();
+        schema_builder.add_text_field("title", STORED);
+        let old_index = Index::create_in_dir(&index_path, schema_builder.build()).unwrap();
+        drop(old_index);
+
+        let engine = SearchEngine::open(&index_path).unwrap();
+        assert_eq!(engine.document_count().unwrap(), 0);
+        assert!(
+            std::fs::read_dir(parent.path())
+                .unwrap()
+                .flatten()
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("index.incompatible-"))
+        );
     }
 
     #[test]
