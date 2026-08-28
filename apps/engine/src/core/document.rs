@@ -2,6 +2,8 @@
 
 use sha2::{Digest, Sha256};
 
+use crate::core::markdown::to_search_text;
+
 /// A canonical searchable document independent of the index implementation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchDocument {
@@ -11,7 +13,10 @@ pub struct SearchDocument {
     pub source: String,
     pub url: String,
     pub title: String,
+    /// Original Markdown/FFM content retained for snippets and presentation.
     pub body: String,
+    /// Parser-derived visible text used exclusively for full-text indexing.
+    pub search_text: String,
     pub updated_at: String,
     pub images: Vec<String>,
     pub graph: Option<String>,
@@ -38,6 +43,7 @@ impl SearchDocument {
         let title = title.into();
         let body = body.into();
         let updated_at = updated_at.into();
+        let search_text = to_search_text(&body);
         let document_id = stable_document_id(&mapping_id, &url);
         let content_hash = content_hash(&title, &body, &updated_at, &images, graph.as_deref());
         Self {
@@ -47,6 +53,7 @@ impl SearchDocument {
             url,
             title,
             body,
+            search_text,
             updated_at,
             images,
             graph,
@@ -145,6 +152,22 @@ mod tests {
         let base = content_hash("Title", "Body", "2026-08-30", &[], None);
         let changed = content_hash("Title", "Changed", "2026-08-30", &[], None);
         assert_ne!(base, changed);
+    }
+
+    #[test]
+    fn search_text_is_derived_from_markdown_without_changing_hash_input() {
+        let document = SearchDocument::new(
+            stable_mapping_id("/search"),
+            "content.fon",
+            "/search",
+            "Search",
+            "# Search\n\nUse **SPP**.",
+            "2026-08-30",
+            Vec::new(),
+            None,
+        );
+        assert_eq!(document.search_text, "Search\nUse SPP.");
+        assert!(document.content_hash.starts_with("sha256:"));
     }
 
     #[test]

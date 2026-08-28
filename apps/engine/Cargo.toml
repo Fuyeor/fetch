@@ -8,6 +8,7 @@ license = "MIT"
 
 [dependencies]
 axum = "0.8.9"
+ffm-parser = { git = "https://github.com/Fuyeor/markdown-parser.git", branch = "main", package = "ffm-parser" }
 fon-parser = { git = "https://github.com/Fuyeor/fon-parser.git", branch = "main", package = "fon-parser" }
 futures-util = "0.3.31"
 jieba-rs = "0.10.3"

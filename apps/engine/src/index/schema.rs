@@ -14,7 +14,8 @@ pub(crate) struct SearchFields {
     pub(crate) source: Field,
     pub(crate) url: Field,
     pub(crate) title: Field,
-    pub(crate) content: Field,
+    pub(crate) content_raw: Field,
+    pub(crate) content_search: Field,
     pub(crate) updated_at: Field,
     pub(crate) image_url: Field,
     pub(crate) graph: Field,
@@ -37,7 +38,8 @@ pub(crate) fn build_schema() -> (Schema, SearchFields) {
     let source = builder.add_text_field("source", STRING | STORED);
     let url = builder.add_text_field("url", STRING | STORED);
     let title = builder.add_text_field("title", text_options.clone());
-    let content = builder.add_text_field("content", text_options);
+    let content_raw = builder.add_text_field("content_raw", STORED);
+    let content_search = builder.add_text_field("content_search", text_options);
     let updated_at = builder.add_text_field("updated_at", STRING | STORED);
     let image_url = builder.add_text_field("image_url", STRING | STORED);
     let graph = builder.add_text_field("graph", STRING | STORED);
@@ -52,7 +54,8 @@ pub(crate) fn build_schema() -> (Schema, SearchFields) {
             source,
             url,
             title,
-            content,
+            content_raw,
+            content_search,
             updated_at,
             image_url,
             graph,
@@ -70,7 +73,8 @@ pub(crate) fn fields_from_schema(schema: &Schema) -> IndexResult<SearchFields> {
         source: schema.get_field("source")?,
         url: schema.get_field("url")?,
         title: schema.get_field("title")?,
-        content: schema.get_field("content")?,
+        content_raw: schema.get_field("content_raw")?,
+        content_search: schema.get_field("content_search")?,
         updated_at: schema.get_field("updated_at")?,
         image_url: schema.get_field("image_url")?,
         graph: schema.get_field("graph")?,

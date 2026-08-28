@@ -507,6 +507,7 @@ name = "fetch-engine"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "ffm-parser",
  "fon-parser",
  "futures-util",
  "jieba-rs",
@@ -520,6 +521,11 @@ dependencies = [
  "tokio",
  "tower",
 ]
+
+[[package]]
+name = "ffm-parser"
+version = "0.1.0"
+source = "git+https://github.com/Fuyeor/markdown-parser.git?branch=main#2b1ccb841aa58a453d889dfff7fd2ad70a1594f9"
 
 [[package]]
 name = "find-msvc-tools"

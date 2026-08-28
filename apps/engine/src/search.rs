@@ -255,8 +255,10 @@ impl SearchEngine {
         }
         let limit = limit.clamp(1, MAX_PAGE_SIZE);
         let searcher = self.reader.searcher();
-        let parser =
-            QueryParser::for_index(&self.index, vec![self.fields.title, self.fields.content]);
+        let parser = QueryParser::for_index(
+            &self.index,
+            vec![self.fields.title, self.fields.content_search],
+        );
         let parsed_query = parser.parse_query(query)?;
         let total = searcher.search(&parsed_query, &Count)?;
         let top_docs = searcher.search(
@@ -273,7 +275,7 @@ impl SearchEngine {
                 mapping_id: first_text(&document, self.fields.mapping_id),
                 url: first_text(&document, self.fields.url),
                 title: first_text(&document, self.fields.title),
-                snippet: first_text(&document, self.fields.content)
+                snippet: first_text(&document, self.fields.content_raw)
                     .chars()
                     .take(180)
                     .collect(),
@@ -319,7 +321,8 @@ impl SearchEngine {
         document.add_text(self.fields.source, &page.source);
         document.add_text(self.fields.url, &page.url);
         document.add_text(self.fields.title, &page.title);
-        document.add_text(self.fields.content, &page.body);
+        document.add_text(self.fields.content_raw, &page.body);
+        document.add_text(self.fields.content_search, &page.search_text);
         document.add_text(self.fields.updated_at, &page.updated_at);
         document.add_text(self.fields.content_hash, &page.content_hash);
         document.add_text(self.fields.generation, page.generation.to_string());
@@ -425,6 +428,27 @@ mod tests {
         assert_eq!(second.generation, 2);
         assert_eq!(second.updated, 1);
         assert_eq!(engine.document_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn search_uses_plain_text_and_preserves_raw_markdown_snippet() {
+        let directory = tempdir().unwrap();
+        let engine = SearchEngine::open(directory.path()).unwrap();
+        let page = SearchDocument::new(
+            "mapping",
+            "content.fon",
+            "/markdown",
+            "Markdown page",
+            "# Search heading\n\nUse **SPP** for [FON](https://example.com).",
+            "2026-08-30",
+            Vec::new(),
+            None,
+        );
+        engine.sync_documents(std::slice::from_ref(&page)).unwrap();
+
+        let response = engine.search("Search heading", 0, 10).unwrap();
+        assert_eq!(response.total, 1);
+        assert_eq!(response.results[0].snippet, page.body);
     }
 
     #[test]
