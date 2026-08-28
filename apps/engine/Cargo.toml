@@ -9,13 +9,16 @@ license = "MIT"
 [dependencies]
 axum = "0.8.9"
 fon-parser = { git = "https://github.com/Fuyeor/fon-parser.git", branch = "main", package = "fon-parser" }
+futures-util = "0.3.31"
 jieba-rs = "0.10.3"
+tempfile = "3.27.0"
 serde = { version = "1.0", features = ["derive"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["http2", "rustls", "stream"] }
+redb = "4.2.0"
 serde_json = "1.0"
 sha2 = "0.10"
 tantivy = "0.26.1"
-tokio = { version = "1.48", features = ["macros", "net", "rt-multi-thread"] }
+tokio = { version = "1.48", features = ["macros", "net", "rt-multi-thread", "time"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
-tempfile = "3.27.0"

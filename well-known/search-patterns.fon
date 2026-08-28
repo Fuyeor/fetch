@@ -1,7 +1,6 @@
 // well-known/search-patterns.fon
 [
   {
-    id = `profile`
     pattern = `/@{username}`
     params = struct {
       username: string
@@ -9,7 +8,6 @@
     datas = ./well-known/sitemaps/users.fon
   }
   {
-    id = `user-tab`
     pattern = `/@{username}/{tab}`
     params = struct {
       username: string
@@ -18,7 +16,6 @@
     datas = ./well-known/sitemaps/user-tabs.fon
   }
   {
-    id = `thought`
     pattern = `/{locale}/thought/{id}`
     params = struct {
       locale: enum { en, fr, es, zh-hans }

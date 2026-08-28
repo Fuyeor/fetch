@@ -10,6 +10,7 @@ pub type ConfigResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub struct Config {
     pub data_root: PathBuf,
     pub index_root: PathBuf,
+    pub crawler_state_root: PathBuf,
     pub bind_address: SocketAddr,
 }
 
@@ -18,12 +19,14 @@ impl Config {
     pub fn from_env() -> ConfigResult<Self> {
         let data_root = env_path("FETCH_DATA_ROOT", ".")?;
         let index_root = env_path("FETCH_INDEX_ROOT", ".fetch-index")?;
+        let crawler_state_root = env_path("FETCH_CRAWLER_STATE_ROOT", ".fetch-state")?;
         let bind_address = std::env::var("FETCH_BIND")
             .unwrap_or_else(|_| "127.0.0.1:3000".to_string())
             .parse()?;
         Ok(Self {
             data_root,
             index_root,
+            crawler_state_root,
             bind_address,
         })
     }

@@ -35,6 +35,7 @@ pub struct IndexStatus {
     pub mappings: usize,
     pub generation: u64,
     pub last_rebuilt_at: String,
+    pub last_ingested_at: String,
 }
 
 /// Result of one complete sitemap ingestion.
@@ -48,4 +49,8 @@ pub struct RebuildReport {
     pub updated: usize,
     pub deleted: usize,
     pub unchanged: usize,
+    pub fetched: usize,
+    pub not_modified: usize,
+    pub retries: usize,
+    pub deferred: usize,
 }

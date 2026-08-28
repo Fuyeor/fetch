@@ -10,12 +10,13 @@ use crate::core::ast::{
     parse_root_value,
 };
 use crate::core::document::{SearchDocument, stable_mapping_id};
-use crate::core::pattern::{expand_pattern, placeholder_names};
+use crate::core::pattern::{canonical_pattern, expand_pattern, placeholder_names};
 
 /// Describes one pattern-to-sitemap mapping declared by the site.
 #[derive(Debug, Clone)]
 pub struct MappingSpec {
-    pub id: String,
+    /// Internal key derived from the canonical pattern; never read from FON.
+    pub mapping_id: String,
     pub pattern: String,
     pub datas: PathBuf,
 }
@@ -37,10 +38,7 @@ pub fn load_catalog(root: &Path) -> CoreResult<LoadedCatalog> {
     for mapping in &mappings {
         let data_path = resolve_site_path(root, &mapping.datas)?;
         let rows_source = std::fs::read_to_string(&data_path)?;
-        let rows = parse_root_value(&rows_source, &data_path)?;
-        let RuntimeValue::Array(rows) = rows else {
-            return Err(format!("{} must contain a root array", data_path.display()).into());
-        };
+        let rows = parse_sitemap_rows(&rows_source, &data_path)?;
         for row in rows {
             pages.extend(materialize_row(root, mapping, &row)?);
         }
@@ -50,7 +48,7 @@ pub fn load_catalog(root: &Path) -> CoreResult<LoadedCatalog> {
 }
 
 /// Parse and semantically inspect the mapping index while preserving schema syntax.
-fn parse_mappings(source: &str, path: &Path) -> CoreResult<Vec<MappingSpec>> {
+pub(crate) fn parse_mappings(source: &str, path: &Path) -> CoreResult<Vec<MappingSpec>> {
     let result = parse(source);
     if result.has_errors() {
         return Err(format!(
@@ -66,7 +64,7 @@ fn parse_mappings(source: &str, path: &Path) -> CoreResult<Vec<MappingSpec>> {
         .root_array_items()
         .ok_or_else(|| format!("{} must contain a root array", path.display()))?;
     let mut mappings = Vec::with_capacity(item_ids.len());
-    let mut mapping_ids = BTreeSet::new();
+    let mut mapping_patterns = BTreeSet::new();
 
     for item_id in item_ids {
         let value = result
@@ -77,8 +75,19 @@ fn parse_mappings(source: &str, path: &Path) -> CoreResult<Vec<MappingSpec>> {
         let Value::Object(object) = value else {
             return Err("each mapping must be an object".into());
         };
+        for member in &object.members {
+            let key = result
+                .document
+                .ast
+                .member_key_text(*member)
+                .ok_or_else(|| "mapping contains an invalid member".to_string())?;
+            if !matches!(key, "pattern" | "params" | "datas") {
+                return Err(format!("unsupported mapping field: {key}").into());
+            }
+        }
         let pattern = object_string_field(&result.document.ast, &object.members, "pattern")?
             .ok_or_else(|| "mapping.pattern is required".to_string())?;
+        let pattern = canonical_pattern(&pattern)?;
         let datas = object_path_field(&result.document.ast, &object.members, "datas")?
             .ok_or_else(|| "mapping.datas is required".to_string())?;
         let params = object_field_value(&result.document.ast, &object.members, "params")
@@ -112,13 +121,11 @@ fn parse_mappings(source: &str, path: &Path) -> CoreResult<Vec<MappingSpec>> {
         {
             return Err("mapping.params fields must exactly match pattern placeholders".into());
         }
-        let id = object_string_field(&result.document.ast, &object.members, "id")?
-            .unwrap_or_else(|| stable_mapping_id(&pattern, &datas));
-        if id.trim().is_empty() || !mapping_ids.insert(id.clone()) {
-            return Err("mapping ids must be non-empty and unique".into());
+        if !mapping_patterns.insert(pattern.clone()) {
+            return Err("mapping patterns must be unique after canonicalization".into());
         }
         mappings.push(MappingSpec {
-            id,
+            mapping_id: stable_mapping_id(&pattern),
             pattern,
             datas: PathBuf::from(datas),
         });
@@ -127,11 +134,47 @@ fn parse_mappings(source: &str, path: &Path) -> CoreResult<Vec<MappingSpec>> {
     Ok(mappings)
 }
 
+/// Parse a finite sitemap binding file without fetching or executing its content.
+pub(crate) fn parse_sitemap_rows(source: &str, path: &Path) -> CoreResult<Vec<RuntimeValue>> {
+    let value = parse_root_value(source, path)?;
+    let RuntimeValue::Array(rows) = value else {
+        return Err(format!("{} must contain a root array", path.display()).into());
+    };
+    Ok(rows)
+}
+
 /// Materialize one sitemap row into one or more concrete pages.
 fn materialize_row(
     root: &Path,
     mapping: &MappingSpec,
     row: &RuntimeValue,
+) -> CoreResult<Vec<SearchDocument>> {
+    let RuntimeValue::Object(object) = row else {
+        return Err("each sitemap row must be an object".into());
+    };
+    let content_reference = object
+        .get("content")
+        .map(RuntimeValue::as_string)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "sitemap row.content is required".to_string())?;
+    let content_path = resolve_site_path(root, Path::new(&content_reference))?;
+    let content_source = std::fs::read_to_string(&content_path)?;
+    materialize_row_from_source(
+        mapping,
+        row,
+        &content_reference,
+        &content_source,
+        Path::new(&content_reference),
+    )
+}
+
+/// Materialize one already-fetched content source for a sitemap row.
+pub(crate) fn materialize_row_from_source(
+    mapping: &MappingSpec,
+    row: &RuntimeValue,
+    source: &str,
+    content_source: &str,
+    display_path: &Path,
 ) -> CoreResult<Vec<SearchDocument>> {
     let RuntimeValue::Object(object) = row else {
         return Err("each sitemap row must be an object".into());
@@ -146,21 +189,15 @@ fn materialize_row(
         .get("updated-at")
         .map(RuntimeValue::as_string)
         .unwrap_or_default();
-    let content_reference = object
-        .get("content")
-        .map(RuntimeValue::as_string)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "sitemap row.content is required".to_string())?;
-    let content_path = resolve_site_path(root, Path::new(&content_reference))?;
-    let content = parse_content(&content_path)?;
+    let content = parse_content_source(content_source, display_path)?;
     let urls = expand_pattern(&mapping.pattern, params)?;
 
     Ok(urls
         .into_iter()
         .map(|url| {
             SearchDocument::new(
-                mapping.id.clone(),
-                content_reference.clone(),
+                mapping.mapping_id.clone(),
+                source.to_string(),
                 url,
                 choose_title(content.title.as_deref(), &content.body),
                 content.body.clone(),
@@ -181,10 +218,8 @@ struct ContentPage {
     graph: Option<String>,
 }
 
-/// Parse content FON without interpreting HTML; content remains plain text/Markdown.
-fn parse_content(path: &Path) -> CoreResult<ContentPage> {
-    let source = std::fs::read_to_string(path)?;
-    let value = parse_root_value(&source, path)?;
+fn parse_content_source(source: &str, path: &Path) -> CoreResult<ContentPage> {
+    let value = parse_root_value(source, path)?;
     let RuntimeValue::Object(object) = value else {
         return Err(format!("{} must contain an object", path.display()).into());
     };
@@ -253,7 +288,7 @@ fn resolve_site_path(root: &Path, path: &Path) -> CoreResult<PathBuf> {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{choose_title, load_catalog, parse_mappings};
+    use super::{choose_title, load_catalog, parse_mappings, stable_mapping_id};
 
     #[test]
     fn loads_repository_mock_catalog() {
@@ -261,9 +296,18 @@ mod tests {
         let catalog = load_catalog(&root).expect("repository mock catalog must load");
         assert_eq!(catalog.mappings.len(), 3);
         assert_eq!(catalog.pages.len(), 5);
-        assert_eq!(catalog.mappings[0].id, "profile");
-        assert_eq!(catalog.mappings[1].id, "user-tab");
-        assert_eq!(catalog.mappings[2].id, "thought");
+        assert_eq!(
+            catalog.mappings[0].mapping_id,
+            stable_mapping_id("/@{username}")
+        );
+        assert_eq!(
+            catalog.mappings[1].mapping_id,
+            stable_mapping_id("/@{username}/{tab}")
+        );
+        assert_eq!(
+            catalog.mappings[2].mapping_id,
+            stable_mapping_id("/{locale}/thought/{id}")
+        );
         assert!(
             catalog
                 .pages
@@ -286,10 +330,18 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_mapping_ids_are_rejected() {
+    fn duplicate_mapping_patterns_are_rejected() {
         let source = r#"[
-          { id = `same` pattern = `/{username}` params = struct { username: string } datas = ./a.fon }
-          { id = `same` pattern = `/{locale}` params = struct { locale: string } datas = ./b.fon }
+          { pattern = `/{username}` params = struct { username: string } datas = ./a.fon }
+          { pattern = `/{username}` params = struct { username: string } datas = ./b.fon }
+        ]"#;
+        assert!(parse_mappings(source, std::path::Path::new("mappings.fon")).is_err());
+    }
+
+    #[test]
+    fn explicit_mapping_id_is_rejected() {
+        let source = r#"[
+          { id = `profile` pattern = `/{username}` params = struct { username: string } datas = ./a.fon }
         ]"#;
         assert!(parse_mappings(source, std::path::Path::new("mappings.fon")).is_err());
     }
@@ -297,7 +349,7 @@ mod tests {
     #[test]
     fn mapping_params_must_match_pattern_placeholders() {
         let source = r#"[
-          { id = `profile` pattern = `/{username}` params = struct { account: string } datas = ./a.fon }
+          { pattern = `/{username}` params = struct { account: string } datas = ./a.fon }
         ]"#;
         assert!(parse_mappings(source, std::path::Path::new("mappings.fon")).is_err());
     }

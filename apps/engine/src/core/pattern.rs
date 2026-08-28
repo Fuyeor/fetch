@@ -2,6 +2,28 @@
 
 use super::ast::{CoreResult, RuntimeValue};
 
+/// Normalize and validate one FRL pattern before it becomes a mapping identity.
+pub fn canonical_pattern(pattern: &str) -> CoreResult<String> {
+    let pattern = pattern.trim();
+    if pattern.is_empty() {
+        return Err("pattern must not be empty".into());
+    }
+    if !pattern.starts_with('/') {
+        return Err("pattern must start with '/'".into());
+    }
+    if pattern.contains("//") {
+        return Err("pattern must not contain repeated slashes".into());
+    }
+    if pattern.contains('?') || pattern.contains('#') {
+        return Err("pattern must not contain a query or fragment".into());
+    }
+    if pattern.chars().any(char::is_control) {
+        return Err("pattern must not contain control characters".into());
+    }
+    placeholder_names(pattern)?;
+    Ok(pattern.to_string())
+}
+
 /// Extract and validate unique placeholder names from one FRL pattern.
 pub fn placeholder_names(pattern: &str) -> CoreResult<Vec<String>> {
     if pattern.is_empty() {
@@ -140,8 +162,20 @@ pub fn canonical_path(value: &str) -> String {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::expand_pattern;
+    use super::{canonical_pattern, expand_pattern};
     use crate::core::ast::RuntimeValue;
+
+    #[test]
+    fn canonical_pattern_rejects_ambiguous_paths() {
+        assert!(canonical_pattern("/@{username}//posts").is_err());
+        assert!(canonical_pattern("/@{username}?tab=posts").is_err());
+        assert!(canonical_pattern("@{username}").is_err());
+    }
+
+    #[test]
+    fn canonical_pattern_preserves_meaningful_trailing_slash() {
+        assert_eq!(canonical_pattern("/posts/").unwrap(), "/posts/");
+    }
 
     #[test]
     fn expands_array_parameters_to_multiple_paths() {

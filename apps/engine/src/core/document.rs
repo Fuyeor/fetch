@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchDocument {
     pub document_id: String,
+    /// Internal mapping key derived exclusively from the canonical FRL pattern.
     pub mapping_id: String,
     pub source: String,
     pub url: String,
@@ -19,7 +20,7 @@ pub struct SearchDocument {
 }
 
 impl SearchDocument {
-    /// Build a document and derive identity from its mapping and canonical URL.
+    /// Build a document and derive identity from its pattern-derived mapping key and URL.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         mapping_id: impl Into<String>,
@@ -61,17 +62,18 @@ impl SearchDocument {
     }
 }
 
-/// Derive a stable ID from immutable mapping identity.
-pub fn stable_mapping_id(pattern: &str, datas: &str) -> String {
+/// Derive a stable internal mapping key from the canonical FRL pattern only.
+pub fn stable_mapping_id(canonical_pattern: &str) -> String {
     let mut hasher = Sha256::new();
-    update_length_prefixed(&mut hasher, pattern.as_bytes());
-    update_length_prefixed(&mut hasher, datas.as_bytes());
+    hasher.update(b"fetch/mapping/v1\0");
+    update_length_prefixed(&mut hasher, canonical_pattern.as_bytes());
     format!("map_{}", hex_digest(hasher.finalize()))
 }
 
 /// Derive a stable ID from protocol identity, not from mutable page content.
 pub fn stable_document_id(mapping_id: &str, canonical_url: &str) -> String {
     let mut hasher = Sha256::new();
+    hasher.update(b"fetch/document/v1\0");
     update_length_prefixed(&mut hasher, mapping_id.as_bytes());
     update_length_prefixed(&mut hasher, canonical_url.as_bytes());
     format!("doc_{}", hex_digest(hasher.finalize()))
@@ -86,6 +88,7 @@ pub fn content_hash(
     graph: Option<&str>,
 ) -> String {
     let mut hasher = Sha256::new();
+    hasher.update(b"fetch/content/v1\0");
     for value in [title, body, updated_at] {
         update_length_prefixed(&mut hasher, value.as_bytes());
     }
@@ -118,17 +121,23 @@ fn hex_digest<D: AsRef<[u8]>>(digest: D) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{SearchDocument, content_hash, stable_document_id};
+    use super::{SearchDocument, content_hash, stable_document_id, stable_mapping_id};
+
+    #[test]
+    fn mapping_id_depends_on_canonical_pattern_only() {
+        let first = stable_mapping_id("/@{username}/thoughts");
+        let second = stable_mapping_id("/@{username}/thoughts");
+        assert_eq!(first, second);
+        assert_ne!(first, stable_mapping_id("/@{username}/articles"));
+    }
 
     #[test]
     fn document_id_depends_on_mapping_and_url_only() {
-        let first = stable_document_id("thoughts", "/zh-hans/thought/1001");
-        let second = stable_document_id("thoughts", "/zh-hans/thought/1001");
+        let mapping_id = stable_mapping_id("/@{username}/thoughts");
+        let first = stable_document_id(&mapping_id, "/@Fuyeor/thoughts");
+        let second = stable_document_id(&mapping_id, "/@Fuyeor/thoughts");
         assert_eq!(first, second);
-        assert_ne!(
-            first,
-            stable_document_id("thoughts", "/zh-hans/thought/1002")
-        );
+        assert_ne!(first, stable_document_id(&mapping_id, "/@Fuyeor/comments"));
     }
 
     #[test]
@@ -141,7 +150,7 @@ mod tests {
     #[test]
     fn new_document_starts_before_publication_generation() {
         let document = SearchDocument::new(
-            "profile",
+            stable_mapping_id("/@{username}"),
             "profile.fon",
             "/@Fuyeor",
             "Fuyeor",

@@ -3,12 +3,13 @@
 use std::sync::{Arc, RwLock};
 
 use axum::Router;
-use axum::extract::{Query, State};
+use axum::extract::{Json as JsonRequest, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
 use serde::Deserialize;
 
+use crate::crawler::Crawler;
 use crate::fon::load_catalog;
 use crate::model::{IndexStatus, RebuildReport, SearchResponse};
 use crate::search::SearchEngine;
@@ -18,6 +19,7 @@ use crate::search::SearchEngine;
 pub struct AppState {
     pub engine: Arc<SearchEngine>,
     pub mock_root: std::path::PathBuf,
+    pub crawler: Option<Arc<Crawler>>,
     metadata: Arc<RwLock<IndexMetadata>>,
 }
 
@@ -25,13 +27,31 @@ pub struct AppState {
 struct IndexMetadata {
     mappings: usize,
     last_rebuilt_at: String,
+    last_ingested_at: String,
 }
 
 impl AppState {
+    /// Build a local-only state used by fixture tests and development rebuilds.
+    #[cfg(test)]
     pub fn new(engine: Arc<SearchEngine>, mock_root: std::path::PathBuf) -> Self {
         Self {
             engine,
             mock_root,
+            crawler: None,
+            metadata: Arc::new(RwLock::new(IndexMetadata::default())),
+        }
+    }
+
+    /// Build the production-shaped state with a durable submitted-locator crawler.
+    pub fn new_with_crawler(
+        engine: Arc<SearchEngine>,
+        mock_root: std::path::PathBuf,
+        crawler: Arc<Crawler>,
+    ) -> Self {
+        Self {
+            engine,
+            mock_root,
+            crawler: Some(crawler),
             metadata: Arc::new(RwLock::new(IndexMetadata::default())),
         }
     }
@@ -43,6 +63,7 @@ pub fn router(state: AppState) -> Router {
         .route("/search", get(search))
         .route("/index/status", get(index_status))
         .route("/index/rebuild", post(rebuild_index))
+        .route("/index/ingest", post(ingest_index))
         .with_state(state)
 }
 
@@ -51,6 +72,11 @@ pub struct SearchQuery {
     pub q: String,
     pub offset: Option<usize>,
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IngestRequest {
+    pub mapping_url: String,
 }
 
 /// Execute a bounded full-text query and return a stable JSON envelope.
@@ -77,6 +103,7 @@ async fn index_status(State(state): State<AppState>) -> Result<Json<IndexStatus>
         mappings: metadata.mappings,
         generation: state.engine.generation()?,
         last_rebuilt_at: metadata.last_rebuilt_at.clone(),
+        last_ingested_at: metadata.last_ingested_at.clone(),
     }))
 }
 
@@ -99,6 +126,43 @@ async fn rebuild_index(State(state): State<AppState>) -> Result<Json<RebuildRepo
         updated: sync.updated,
         deleted: sync.deleted,
         unchanged: sync.unchanged,
+        fetched: 0,
+        not_modified: 0,
+        retries: 0,
+        deferred: 0,
+    }))
+}
+
+/// Ingest a webmaster-submitted remote mapping and atomically publish its finite catalog.
+async fn ingest_index(
+    State(state): State<AppState>,
+    JsonRequest(request): JsonRequest<IngestRequest>,
+) -> Result<Json<RebuildReport>, ApiError> {
+    let crawler = state
+        .crawler
+        .as_ref()
+        .ok_or_else(|| "remote ingestion is not enabled".to_string())?;
+    let remote = crawler.ingest_mapping(&request.mapping_url).await?;
+    let sync = state.engine.sync_documents(&remote.catalog.pages)?;
+    let mut metadata = state
+        .metadata
+        .write()
+        .map_err(|_| "index metadata lock poisoned")?;
+    metadata.mappings = remote.catalog.mappings.len();
+    metadata.last_ingested_at = unix_timestamp().to_string();
+    Ok(Json(RebuildReport {
+        mappings: remote.catalog.mappings.len(),
+        rows: remote.rows,
+        documents: remote.catalog.pages.len(),
+        generation: sync.generation,
+        added: sync.added,
+        updated: sync.updated,
+        deleted: sync.deleted,
+        unchanged: sync.unchanged,
+        fetched: remote.stats.fetched,
+        not_modified: remote.stats.not_modified,
+        retries: remote.stats.retries,
+        deferred: remote.stats.deferred,
     }))
 }
 
@@ -116,6 +180,12 @@ struct ApiError(Box<dyn std::error::Error + Send + Sync>);
 impl From<Box<dyn std::error::Error + Send + Sync>> for ApiError {
     fn from(error: Box<dyn std::error::Error + Send + Sync>) -> Self {
         Self(error)
+    }
+}
+
+impl From<String> for ApiError {
+    fn from(error: String) -> Self {
+        Self(std::io::Error::other(error).into())
     }
 }
 
@@ -214,5 +284,69 @@ mod tests {
                 .as_str()
                 .is_some_and(|url| url.contains("thought"))
         );
+    }
+
+    #[tokio::test]
+    async fn ingest_endpoint_publishes_remote_submitted_catalog() {
+        let remote_app = axum::Router::new()
+            .route(
+                "/search-patterns.fon",
+                axum::routing::get(|| async {
+                    "[{ pattern = `/profile/{username}` params = struct { username: string } datas = `/sitemap.fon` }]"
+                }),
+            )
+            .route(
+                "/sitemap.fon",
+                axum::routing::get(|| async {
+                    "[{ params = { username = `Alice` } content = `/content.fon` }]"
+                }),
+            )
+            .route(
+                "/content.fon",
+                axum::routing::get(|| async { "{ title = `Alice` content = `# Hello` }" }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, remote_app).await.unwrap() });
+
+        let index_dir = tempfile::tempdir().expect("temporary index directory must be created");
+        let state_dir = tempfile::tempdir().expect("temporary crawler state must be created");
+        let engine =
+            Arc::new(SearchEngine::open(index_dir.path()).expect("temporary index must open"));
+        let crawler = Arc::new(
+            crate::crawler::Crawler::open(
+                &state_dir.path().join("state"),
+                crate::crawler::FetchPolicy::for_tests(),
+                crate::crawler::CrawlerConfig {
+                    max_attempts: 1,
+                    ..crate::crawler::CrawlerConfig::default()
+                },
+            )
+            .expect("crawler must open"),
+        );
+        let app = router(AppState::new_with_crawler(
+            engine,
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+            crawler,
+        ));
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/index/ingest")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        "{{\"mapping_url\":\"http://{address}/search-patterns.fon\"}}"
+                    )))
+                    .unwrap(),
+            )
+            .await
+            .expect("ingest response must be returned");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["documents"], 1);
+        assert_eq!(json["fetched"], 3);
+        assert_eq!(json["generation"], 1);
     }
 }
