@@ -1,0 +1,13 @@
+// well-known/sitemaps/user-tabs.fon
+[
+  {
+    params = { username = `Fuyeor`, tab = .thoughts }
+    updated-at = `2026-08-30T08:30:00.000Z`
+    content = ./well-known/content/fuyeor-thoughts.fon
+  }
+  {
+    params = { username = `Fuyeor`, tab = .comments }
+    updated-at = `2026-08-30T08:30:00.000Z`
+    content = ./well-known/content/fuyeor-comments.fon
+  }
+]

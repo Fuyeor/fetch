@@ -1,0 +1,13 @@
+// well-known/content/thought-en-1002.fon
+title = `Pattern-driven indexing`
+content = `# Pattern-driven indexing
+
+SPP lets a search engine index a deterministic page generator instead of crawling every possible URL. This keeps generated content discoverable without materializing an unbounded sitemap.`
+images = [
+  `https://fuyeor.com/assets/pattern-indexing.webp`
+]
+graph = {
+  type = .article
+  name = `Pattern-driven indexing`
+  description = `Deterministic page generation for search`
+}

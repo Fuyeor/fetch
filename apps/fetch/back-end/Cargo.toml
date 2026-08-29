@@ -1,5 +1,0 @@
-[package]
-name = "fetch-backend"
-edition = "2024"
-
-[dependencies]

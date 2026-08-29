@@ -63,3 +63,9 @@
 
 .DS_Store
 Thumbs.db
+
+# Engine runtime state
+/.fetch-index/
+/apps/engine/.fetch-index/
+/.fetch-state/
+/apps/engine/.fetch-state/

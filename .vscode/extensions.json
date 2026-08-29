@@ -1,0 +1,11 @@
+// .vscode/extensions.json
+{
+  "recommendations": [
+    // format FON
+    "fuyeor.fer",
+    // Prettier: format JSON, TS, JS
+    "esbenp.prettier-vscode",
+    // Rust: language server & analyzer
+    "rust-lang.rust-analyzer"
+  ]
+}
