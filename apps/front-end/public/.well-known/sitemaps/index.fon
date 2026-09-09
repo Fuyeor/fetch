@@ -1,0 +1,7 @@
+// .well-known/sitemaps/index.fon
+[
+  {
+    pattern = `/`
+    datas = ./well-known/sitemaps/home/index.fon
+  }
+]

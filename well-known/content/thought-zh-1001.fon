@@ -1,0 +1,13 @@
+// well-known/content/thought-zh-1001.fon
+title = `SPP 与生成页面`
+content = `# SPP 与生成页面
+
+当网站可以通过程序生成十亿个页面时，搜索引擎应索引生成规则和参数空间，而不是定时爬取每一个页面。`
+images = [
+  `https://fuyeor.com/assets/generated-pages.webp`
+]
+graph = {
+  type = .article
+  name = `SPP 与生成页面`
+  description = `通过参数空间派生页面`
+}

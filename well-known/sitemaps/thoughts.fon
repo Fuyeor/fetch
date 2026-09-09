@@ -1,0 +1,13 @@
+// well-known/sitemaps/thoughts.fon
+[
+  {
+    params = { locale = .zh-hans, id = 1001 }
+    updated-at = `2026-08-30T08:30:00.000Z`
+    content = ./well-known/content/thought-zh-1001.fon
+  }
+  {
+    params = { locale = .en, id = 1002 }
+    updated-at = `2026-08-29T16:00:00.000Z`
+    content = ./well-known/content/thought-en-1002.fon
+  }
+]

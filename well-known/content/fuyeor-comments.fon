@@ -1,0 +1,13 @@
+// well-known/content/fuyeor-comments.fon
+title = `Fuyeor 的 Comments`
+content = `# Comments
+
+这里展示用户参与讨论的评论索引。正文按纯 Markdown 处理，HTML 不会被解析或执行。`
+images = [
+  `https://fuyeor.com/assets/comment-thread.webp`
+]
+graph = {
+  type = .discussion
+  name = `Fuyeor comments`
+  description = `Comments authored by Fuyeor`
+}

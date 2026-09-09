@@ -1,0 +1,50 @@
+{
+  "search.empty": {
+    "ar": "لم يتم العثور على نتائج لـ \"{query}\".",
+    "de": "Keine Ergebnisse für „{query}“ gefunden.",
+    "en": "No results found for \"{query}\".",
+    "es": "No se encontraron resultados para \"{query}\".",
+    "fr": "Aucun résultat trouvé pour « {query} ».",
+    "ja": "「{query}」に一致する結果は見つかりませんでした。",
+    "ko": "'{query}'에 대한 검색결과가 없습니다.",
+    "pt": "Nenhum resultado encontrado para \"{query}\".",
+    "ru": "По запросу «{query}» ничего не найдено.",
+    "zh-hans": "未找到「{query}」相关的内容。"
+  },
+  "search.placeholder": {
+    "ar": "ابحث في الويب...",
+    "de": "Im Web suchen...",
+    "en": "Search the Web...",
+    "es": "Buscar en la web...",
+    "fr": "Rechercher sur le Web...",
+    "ja": "ウェブを検索...",
+    "ko": "웹 검색...",
+    "pt": "Pesquisar na Web...",
+    "ru": "Поиск в Интернете...",
+    "zh-hans": "搜索网络..."
+  },
+  "site.name": {
+    "ar": "جلب 🔍︎",
+    "de": "Fetch 🔍︎",
+    "en": "Fetch 🔍︎",
+    "es": "Fetch 🔍︎",
+    "fr": "Fetch 🔍︎",
+    "ja": "Fetch 🔍︎",
+    "ko": "Fetch 🔍︎",
+    "pt": "Fetch 🔍︎",
+    "ru": "Fetch 🔍︎",
+    "zh-hans": "Fetch 🔍︎"
+  },
+  "site.title": {
+    "ar": "استكشف بروتوكولاً فعالاً ومستداماً",
+    "de": "Entdecken Sie ein effizientes, nachhaltiges Protokoll",
+    "en": "Explore efficient, sustainable protocol",
+    "es": "Explore un protocolo eficiente y sostenible",
+    "fr": "Explorez un protocole efficace et durable",
+    "ja": "効率的で持続可能なプロトコルを探索する",
+    "ko": "효율적이고 지속 가능한 프로토콜 탐색",
+    "pt": "Explore um protocolo eficiente e sustentável",
+    "ru": "Исследуйте эффективный, устойчивый протокол",
+    "zh-hans": "探索高效、环保新协议"
+  }
+}
