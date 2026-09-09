@@ -1,15 +1,14 @@
 <!-- @/views/Home.vue -->
 <template>
-  <main class="home-container">
-    <div class="home-content">
-      <SearchInput v-model="searchQuery" @search="onSearch" />
-    </div>
-  </main>
+  <div class="home-content">
+    <SearchInput v-model="searchQuery" @search="onSearch" />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
 import SearchInput from '@/components/SearchInput.vue';
+
+import { ref } from 'vue';
 
 const searchQuery = ref('');
 
@@ -18,21 +17,27 @@ const onSearch = (query: string) => {
 };
 </script>
 
-<style scoped>
-.home-container {
+<style>
+.home-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+
   min-height: 100vh;
-  padding: 0 16px;
-  background-color: #f7f8fa;
+  box-sizing: border-box;
 }
 
-.home-content {
-  width: 100%;
-  max-width: 800px;
-  text-align: center;
+/* 30% */
+.home-content::before {
+  content: '';
+  flex: 1;
+}
+
+/* 60% */
+.home-content::after {
+  content: '';
+  flex: 2;
 }
 
 .home-title {

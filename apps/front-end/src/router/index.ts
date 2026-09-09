@@ -19,7 +19,7 @@ const appRoutes: Array<RouteRecord> = [
     component: () => import('@/views/Home.vue'),
     meta: {
       public: true,
-      overrideTitle: ['site.name', ':', 'site.title'],
+      overrideTitle: ['site.name', '—', 'site.title'],
     },
   },
   {
@@ -27,11 +27,8 @@ const appRoutes: Array<RouteRecord> = [
     path: 'search',
     name: 'Search',
     component: () => import('@/views/Search.vue'),
-    props: true,
-    meta: {
-      public: true,
-      areaKey: 'search',
-    },
+    props: (route) => ({ q: route.query.q || '' }),
+    meta: { public: true },
   },
 ];
 

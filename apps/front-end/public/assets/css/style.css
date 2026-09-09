@@ -1,0 +1,77 @@
+/* 亮色模式 */
+:root {
+  --width-body: 1360px;
+  --width-main: 760px;
+  --width-left-sidebar: 240px;
+  --width-right-sidebar: 360px;
+
+  --color-brand: #b4e083;
+  --surface: #f8faf3;
+  --surface-hover: #f2f4f1;
+  --surface-transparent: #ffffffd0;
+  --surface-raised: #fefffd;
+  --surface-raised-hover: rgba(0, 0, 0, 0.03);
+  --surface-top: #f5f5f6;
+  --surface-top-hover: #f8faf3;
+  --text-primary: #465d43;
+  --text-secondary: #697763;
+  --text-tertiary: #67717d;
+  --text-accent: #29f;
+  --text-accent-hover: #9c1a1b;
+  --text-code: #6a737d;
+  --border-subtle: 1px solid #f4f5f0;
+  --border-default: 1px solid #dbe1d4;
+  --input-border-focus: 1px solid #b4e083de;
+  --input-border-shadow: 0 0 0 1px #fff, 0 0 0 3px #b4e08360;
+  --button-brand: var(--color-brand);
+  --button-brand-hover: #9d89e4;
+  --button-action: #292932;
+  --button-action-hover: #44444f;
+  --button-business: #007bff;
+  --button-business-hover: #0b73e3;
+  --button-disabled: #bdc3c7;
+  --ripple-color: rgb(174 164 228 / 10%);
+}
+
+:root[data-theme='dark'],
+:root[data-theme='black'] {
+  --surface: #0e1b1a;
+  --surface-hover: #2a3b3f;
+  --surface-transparent: #161627d0;
+  --surface-raised: #162727;
+  --surface-raised-hover: rgba(255, 255, 255, 0.03);
+  --surface-top: #212137;
+  --surface-top-hover: #24243a;
+  --border-subtle: 1px solid #213734;
+  --border-default: 1px solid #243a36;
+  --input-border: 1px solid #383838;
+  --ripple-color: rgba(255, 255, 255, 0.15);
+}
+
+.left-mobile-header {
+  border: none;
+}
+
+main:has(.home-content) {
+  background: none;
+  border: none;
+  margin: 0;
+}
+
+@media (width >= 1000px) {
+  main {
+    border-radius: var(--radius-lg);
+    margin: 20px 0;
+    overflow: clip;
+  }
+
+  .header {
+    border: none;
+  }
+}
+
+@media (width <= 768px) {
+  main {
+    top: var(--height-header);
+  }
+}

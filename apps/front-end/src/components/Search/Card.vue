@@ -1,20 +1,11 @@
 <!-- @/components/Search/Card.vue -->
 <template>
   <article class="search-card">
-    <div class="search-card-meta">
-      <cite class="search-card-url">{{ item.url }}</cite>
-      <time class="search-card-date">{{ formattedDate }}</time>
-    </div>
-
     <h2 class="search-card-title">
-      <a
-        :href="item.url"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="search-card-link"
-        v-html="item.title"
-      />
+      <a :href="item.url" target="_blank" class="link">{{ item.title }}</a>
     </h2>
+
+    <cite class="search-card-url cite">{{ item.url }}</cite>
 
     <div class="search-card-body">
       <img
@@ -24,23 +15,24 @@
         class="search-card-thumb"
         loading="lazy"
       />
-      <p class="search-card-snippet" v-html="item.snippet" />
+      <p class="search-card-snippet">{{ item.snippet }}</p>
     </div>
+
+    <time class="search-card-date cite">{{
+      formatDate(item.updated_at, { preset: 'relative' })
+    }}</time>
   </article>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { useDateFormatter } from '@fuyeor/commons';
 import type { SearchItem } from '@/types/search';
 
 const props = defineProps<{
   item: SearchItem;
 }>();
 
-const formattedDate = computed(() => {
-  if (!props.item.updated_at) return '';
-  return new window.Date(props.item.updated_at).toLocaleDateString();
-});
+const { formatDate } = useDateFormatter();
 </script>
 
 <style scoped>
@@ -48,49 +40,39 @@ const formattedDate = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 12px 0;
+  padding: 12px 30px;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: var(--surface-raised-hover);
+  }
 }
 
-.search-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
+.cite {
+  color: var(--text-tertiary);
+  font-style: normal;
+  font-size: 0.85rem;
+}
+
+.search-card-title {
+  margin: 0;
+  padding: 0;
+  font-size: 1.1rem;
+  font-weight: 500;
+  line-height: 1.4;
+  border: none;
 }
 
 .search-card-url {
-  color: #606266;
-  font-style: normal;
-  max-width: 400px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.search-card-date {
-  color: #909399;
-}
-
-.search-card-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.search-card-link {
-  color: #1a0dab;
-  text-decoration: none;
-}
-
-.search-card-link:hover {
-  text-decoration: underline;
-}
-
 .search-card-body {
   display: flex;
   gap: 12px;
-  margin-top: 2px;
+  margin: 8px 0;
 }
 
 .search-card-thumb {
@@ -103,9 +85,18 @@ const formattedDate = computed(() => {
 
 .search-card-snippet {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.9rem;
   line-height: 1.58;
-  color: #4d5156;
-  white-space: pre-line;
+  color: var(--text-secondary);
+}
+
+.search-card-date {
+  color: var(--text-tertiary);
+}
+
+@media (width <= 768px) {
+  .search-card {
+    padding: 12px 24px;
+  }
 }
 </style>

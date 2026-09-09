@@ -4,18 +4,22 @@
     <input
       ref="inputRef"
       type="text"
-      :value="modelValue"
       class="search-input"
+      :value="modelValue"
+      :placeholder="t('search.placeholder')"
       @input="handleInput"
       @keydown="handleKeydown"
     />
-    <button type="button" class="search-btn" @click="handleSearch">搜索</button>
+    <button type="button" class="search-btn" @click="handleSearch">
+      <img :src="getIconUrl('search')" v-tooltip="t('search.placeholder')" />
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
 import { useRouter } from '@fuyeor/vue-router';
+import { useLocale } from '@fuyeor/locale';
+import { getIconUrl } from '@fuyeor/commons';
 
 const props = defineProps<{
   modelValue: string;
@@ -27,7 +31,8 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
-const inputRef = ref<HTMLInputElement | null>(null);
+
+const { t } = useLocale();
 
 const handleInput = (event: Event) => {
   const target = event.target as HTMLInputElement;
@@ -56,46 +61,46 @@ const handleKeydown = (event: KeyboardEvent) => {
   align-items: center;
   width: 100%;
   max-width: 600px;
-  margin: 0 auto;
 }
 
 .search-input {
   width: 100%;
-  padding: 14px 100px 14px 20px;
-  font-size: 16px;
-  background-color: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 9999px;
-  outline: none;
+  border: none;
+  border-radius: 24px;
+  padding: 18px 100px 18px 20px;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  border: var(--border-subtle);
+  background-color: var(--surface-raised);
   transition:
     border-color 0.2s,
     box-shadow 0.2s;
-}
 
-.search-input:focus {
-  border-color: #409eff;
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+  &:focus {
+    box-shadow: var(--input-border-shadow);
+  }
 }
 
 .search-btn {
   position: absolute;
-  right: 4px;
-  padding: 10px 24px;
-  color: #ffffff;
-  background-color: #409eff;
+  right: 8px;
+  background: none;
   border: none;
-  border-radius: 9999px;
-  font-size: 14px;
-  font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
+
+  img {
+    width: 1.8rem;
+  }
 }
 
-.search-btn:hover {
-  background-color: #66b1ff;
-}
+@media (width <= 768px) {
+  .search-input-wrapper {
+    width: 90%;
+  }
 
-.search-btn:active {
-  background-color: #3a8ee6;
+  .search-input {
+    padding: 16px 100px 16px 20px;
+  }
 }
 </style>
