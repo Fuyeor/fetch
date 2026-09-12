@@ -2,7 +2,7 @@
 :root {
   --width-body: 1360px;
   --width-main: 760px;
-  --width-left-sidebar: 240px;
+  --width-left-sidebar: 260px;
   --width-right-sidebar: 360px;
 
   --color-brand: #b4e083;
@@ -19,7 +19,7 @@
   --text-accent: #29f;
   --text-accent-hover: #9c1a1b;
   --text-code: #6a737d;
-  --border-subtle: 1px solid #f4f5f0;
+  --border-subtle: 1px solid #dbe1d470;
   --border-default: 1px solid #dbe1d4;
   --input-border-focus: 1px solid #b4e083de;
   --input-border-shadow: 0 0 0 1px #fff, 0 0 0 3px #b4e08360;
@@ -38,13 +38,15 @@
   --surface: #0e1b1a;
   --surface-hover: #2a3b3f;
   --surface-transparent: #161627d0;
-  --surface-raised: #162727;
+  --surface-raised: #162627;
   --surface-raised-hover: rgba(255, 255, 255, 0.03);
   --surface-top: #212137;
   --surface-top-hover: #24243a;
-  --border-subtle: 1px solid #213734;
+  --border-subtle: 1px solid #192923;
   --border-default: 1px solid #243a36;
   --input-border: 1px solid #383838;
+  --border-subtle: 1px solid #21372f;
+  --input-border-shadow: 0 0 0 1px #213734, 0 0 0 3px #b4e08360;
   --ripple-color: rgba(255, 255, 255, 0.15);
 }
 
@@ -73,5 +75,97 @@ main:has(.home-content) {
 @media (width <= 768px) {
   main {
     top: var(--height-header);
+    min-height: calc(100vh - var(--height-header));
+  }
+}
+
+.left-sidebar {
+  .nav p {
+    font-size: 1.25rem;
+  }
+
+  .nav img {
+    width: 1.75rem;
+  }
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+/* FeedCard 的根容器，作为弹窗的定位锚点 */
+.feed-card-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* 确保它不会被父元素的 overflow: hidden 裁剪掉 */
+  overflow: visible;
+}
+
+/* @/components/User/FeedCard.vue：用户信息 */
+.feed-card-wrapper {
+  flex: 1;
+  min-width: 0;
+  overflow: visible;
+
+  &.disable-navigation {
+    /* 禁用点击 */
+    pointer-events: none;
+  }
+
+  .user-feed-card {
+    display: flex;
+    gap: 2px;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .avatar {
+    margin-right: 10px;
+    transition: 0.3s;
+    cursor: pointer;
+  }
+
+  .avatar:hover {
+    filter: contrast(0.5) brightness(1.2);
+  }
+
+  .user-feed-card {
+    .nickname {
+      margin: 0;
+      font-weight: bold;
+      color: var(--text-primary);
+      transition: 0.3s;
+      cursor: pointer;
+
+      span {
+        flex-shrink: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      &:hover {
+        color: var(--text-accent);
+      }
+    }
+
+    .username {
+      color: var(--text-secondary);
+      font-size: 15px;
+      margin: 0;
+    }
+
+    small {
+      display: block;
+      color: var(--text-secondary);
+      font-weight: 400;
+      margin-left: 6px;
+    }
   }
 }

@@ -60,13 +60,12 @@ const handleKeydown = (event: KeyboardEvent) => {
   display: flex;
   align-items: center;
   width: 100%;
-  max-width: 600px;
 }
 
 .search-input {
   width: 100%;
   border: none;
-  border-radius: 24px;
+  border-radius: 32px;
   padding: 18px 100px 18px 20px;
   color: var(--text-secondary);
   font-size: 0.95rem;

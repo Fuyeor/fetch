@@ -11,6 +11,3 @@ export const SUPPORTED_LOCALES = [
   'ar', 'ru', 'ja', 'ko',
   'zh-hans', 'zh-hant'
 ] as const;
-
-// generate regex string for router
-export const LOCALE_REGEX = SUPPORTED_LOCALES.join('|');

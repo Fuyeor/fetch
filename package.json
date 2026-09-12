@@ -1,12 +1,10 @@
 {
-  "name": "fpm-workspace",
+  "name": "fetch",
   "private": true,
   "license": "MIT",
   "author": "Fuyeor <https://www.fuyeor.com/@Fuyeor>",
   "packageManager": "pnpm@11.22.0",
   "scripts": {
-    "build": "pnpm -r build",
-    "lint": "pnpm -r lint",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",

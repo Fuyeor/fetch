@@ -5,6 +5,11 @@ const apiClient = new HttpClient({
   baseURL: '/v1',
   timeout: 10000,
   credentials: 'include',
+  refreshEndpoint: '/auth/refresh-token',
+  refreshTokenFn: async () => {
+    await apiClient.post('/auth/refresh-token');
+  },
+  onSignOut: () => {},
 });
 
 export default apiClient;

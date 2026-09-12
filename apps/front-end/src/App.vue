@@ -13,10 +13,11 @@
 </template>
 
 <script setup lang="ts">
+import LeftSidebar from '@/layout/Left.vue';
+
 import { computed } from 'vue';
 import { useHeadManager } from '@fuyeor/commons';
 import {
-  LeftSidebar,
   useFontLoader,
   useMobileDetection,
   BackTop,

@@ -28,35 +28,34 @@
 import SearchInput from '@/components/Search/Input.vue';
 import SearchCard from '@/components/Search/Card.vue';
 
-import { computed, ref, watch } from 'vue';
-import { useRoute, useRouter } from '@fuyeor/vue-router';
+import { ref, watch } from 'vue';
+import { useRouter } from '@fuyeor/vue-router';
 import { useLocale } from '@fuyeor/locale';
 import { ExternalSearchSuggestions } from '@fuyeor/interactify';
 import { useSearchResultsQuery } from '@/composables/api/useSearch';
 
-const props = defineProps<{
+const { q } = defineProps<{
   q: string;
 }>();
 
-const router = useRouter();
-
 const { t, locale } = useLocale();
 
-const inputQuery = ref<string>(props.q);
+const router = useRouter();
+const inputQuery = ref<string>(q);
 
 watch(
-  () => props.q,
+  () => q,
   (newVal) => {
     inputQuery.value = newVal;
   },
 );
 
 const { data, isLoading, error, isRetrieved } = useSearchResultsQuery(() => ({
-  q: props.q,
+  q: q,
 }));
 
 const triggerSearch = (newQuery: string) => {
-  if (newQuery === props.q) return;
+  if (newQuery === q) return;
   router.push({ name: 'Search', query: { q: newQuery } });
 };
 </script>

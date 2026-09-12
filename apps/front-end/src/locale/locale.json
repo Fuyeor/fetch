@@ -1,4 +1,16 @@
 {
+  "search.console": {
+    "ar": "مشرفي المواقع",
+    "de": "Webmaster",
+    "en": "Webmaster",
+    "es": "Webmaster",
+    "fr": "Webmaster",
+    "ja": "ウェブマスター",
+    "ko": "웹마스터",
+    "pt": "Webmaster",
+    "ru": "Вебмастер",
+    "zh-hans": "站点管理"
+  },
   "search.empty": {
     "ar": "لم يتم العثور على نتائج لـ \"{query}\".",
     "de": "Keine Ergebnisse für „{query}“ gefunden.",
@@ -10,6 +22,18 @@
     "pt": "Nenhum resultado encontrado para \"{query}\".",
     "ru": "По запросу «{query}» ничего не найдено.",
     "zh-hans": "未找到「{query}」相关的内容。"
+  },
+  "search.filter": {
+    "ar": "تصفية",
+    "de": "Filter",
+    "en": "Filter",
+    "es": "Filtro",
+    "fr": "Filtre",
+    "ja": "フィルター",
+    "ko": "필터",
+    "pt": "Filtro",
+    "ru": "Фильтр",
+    "zh-hans": "筛选"
   },
   "search.placeholder": {
     "ar": "ابحث في الويب...",
@@ -23,8 +47,32 @@
     "ru": "Поиск в Интернете...",
     "zh-hans": "搜索网络..."
   },
+  "search.type.image": {
+    "ar": "صور",
+    "de": "Bilder",
+    "en": "Images",
+    "es": "Imágenes",
+    "fr": "Images",
+    "ja": "画像",
+    "ko": "이미지",
+    "pt": "Imagens",
+    "ru": "Картинки",
+    "zh-hans": "图片"
+  },
+  "search.type.web": {
+    "ar": "الويب",
+    "de": "Web",
+    "en": "Web",
+    "es": "Web",
+    "fr": "Web",
+    "ja": "ウェブ",
+    "ko": "웹",
+    "pt": "Web",
+    "ru": "Веб",
+    "zh-hans": "网页"
+  },
   "site.name": {
-    "ar": "جلب 🔍︎",
+    "ar": "Fetch 🔍︎",
     "de": "Fetch 🔍︎",
     "en": "Fetch 🔍︎",
     "es": "Fetch 🔍︎",

@@ -11,13 +11,9 @@ export default defineConfig(() => {
         allowedHosts: ['fetch.localhost'],
         proxy: {
           '/v1': {
-            target: 'http://localhost:3000',
+            target: 'http://localhost:6041',
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/v1/, ''),
-          },
-          '/docs': {
-            target: 'http://localhost:3000',
-            changeOrigin: true,
           },
         },
       },
