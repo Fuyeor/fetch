@@ -66,6 +66,6 @@ Thumbs.db
 
 # Engine runtime state
 /.fetch-index/
-/apps/engine/.fetch-index/
+/app/engine/.fetch-index/
 /.fetch-state/
-/apps/engine/.fetch-state/
+/app/engine/.fetch-state/

@@ -1,4 +1,4 @@
 # Cargo.toml
 [workspace]
 resolver = "2"
-members = ["apps/back-end", "apps/engine"]
+members = ["app/back-end", "app/engine"]
