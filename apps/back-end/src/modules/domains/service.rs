@@ -96,8 +96,7 @@ pub async fn verify_domain(
 
     // 途径 1: DNS TXT 记录查询
     let challenge_host = format!("_fetch-challenge.{}", canonical_domain);
-    let expected_txt_content = format!("fetch-verification={}", expected_token);
-    let mut matched = check_txt_contains(resolver, &challenge_host, &expected_txt_content).await;
+    let mut matched: bool = check_txt_contains(resolver, &challenge_host, &expected_token).await;
 
     // 途径 2: HTTP 文件验证 (/.well-known/fetch-challenge.txt)
     if !matched {
@@ -108,7 +107,7 @@ pub async fn verify_domain(
         if let Ok(resp) = http_client.get(&file_url).send().await {
             if resp.status().is_success() {
                 if let Ok(body) = resp.text().await {
-                    if body.trim() == expected_token || body.trim() == expected_txt_content {
+                    if body.trim() == expected_token  {
                         matched = true;
                     }
                 }
@@ -132,7 +131,7 @@ pub async fn verify_domain(
     } else {
         let message = format!(
             "Verification failed: DNS TXT record matching '{}' not found on '{}', and https://{}/.well-known/fetch-challenge.txt is unreachable.",
-            expected_txt_content, challenge_host, canonical_domain
+            expected_token, challenge_host, canonical_domain
         );
 
         Ok(VerifyDomainResultDto {
@@ -170,7 +169,7 @@ pub async fn list_domains(
                 },
                 verification_token: token.clone(),
                 dns_record_name: format!("_fetch-challenge.{}", d.domain),
-                dns_record_value: format!("fetch-verification={}", token),
+                dns_record_value: token,
                 created_at: d.created_at.to_rfc3339(),
                 verified_at: d.verified_at.map(|t| t.to_rfc3339()),
             }

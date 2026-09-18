@@ -1,11 +1,14 @@
 <!-- @/console/component/domain/card.vue -->
 <template>
-  <div class="domain-card">
+  <div
+    :class="['domain-card', { 'is-clickable': isVerified }]"
+    @click="handleCardClick"
+  >
     <div class="card-header">
       <span class="domain-name">{{ item.domain }}</span>
       <span :class="['status-badge', item.status]">
         {{
-          item.status === 'verified'
+          isVerified
             ? t('console.domain.verified')
             : t('console.domain.unverified')
         }}
@@ -24,15 +27,15 @@
       </div>
       <div class="dns-row">
         <span class="dns-label">主機名 (Host)：</span>
-        <code>{{ item.dns_record_name }}</code>
-        <button class="copy-btn" @click="copyText(item.dns_record_name)">
+        <code>{{ item.dnsRecordName }}</code>
+        <button class="copy-btn" @click.stop="copyText(item.dnsRecordName)">
           複製
         </button>
       </div>
       <div class="dns-row">
         <span class="dns-label">記錄值 (Value)：</span>
-        <code>{{ item.dns_record_value }}</code>
-        <button class="copy-btn" @click="copyText(item.dns_record_value)">
+        <code>{{ item.dnsRecordValue }}</code>
+        <button class="copy-btn" @click.stop="copyText(item.dnsRecordValue)">
           複製
         </button>
       </div>
@@ -41,11 +44,11 @@
         <button
           class="action-btn primary"
           :disabled="isVerifying"
-          @click="emit('verify', item.domain)"
+          @click.stop="emit('verify', item.domain)"
         >
           {{ isVerifying ? '驗證中...' : '立即驗證所有權' }}
         </button>
-        <button class="action-btn danger" @click="showConfirmModal = true">
+        <button class="action-btn danger" @click.stop="showConfirmModal = true">
           {{ t('delete') }}
         </button>
       </div>
@@ -53,9 +56,15 @@
 
     <!-- 已验证状态 -->
     <div v-else class="verified-info">
-      <p>已於 {{ new Date(item.verified_at!).toLocaleString() }} 完成驗證。</p>
+      <p>
+        {{
+          t('console.domain.verified.at', {
+            date: new Date(item.verifiedAt!).toLocaleString(),
+          })
+        }}
+      </p>
       <div class="card-actions">
-        <button class="action-btn danger" @click="showConfirmModal = true">
+        <button class="action-btn danger" @click.stop="showConfirmModal = true">
           {{ t('console.domain.delete.title') }}
         </button>
       </div>
@@ -73,13 +82,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { useRouter } from '@fuyeor/vue-router';
 import { useLocale } from '@fuyeor/locale';
 import { ConfirmModal } from '@fuyeor/interactify';
 import { useCopy } from '@app/composable/useCopy';
 import type { Domain } from '@/console/type';
 
-const props = defineProps<{
+const { item, isVerifying } = defineProps<{
   item: Domain;
   isVerifying?: boolean;
 }>();
@@ -89,8 +99,12 @@ const emit = defineEmits<{
   (e: 'delete', domain: string): void;
 }>();
 
+const router = useRouter();
+
 const { t } = useLocale();
 const { copyText } = useCopy();
+
+const isVerified = computed(() => item.status === 'verified');
 
 // 控制确认弹窗的显示/隐藏
 const showConfirmModal = ref(false);
@@ -98,16 +112,31 @@ const showConfirmModal = ref(false);
 // 确认删除时触发
 const handleConfirmDelete = () => {
   showConfirmModal.value = false;
-  emit('delete', props.item.domain);
+  emit('delete', item.domain);
+};
+
+const handleCardClick = () => {
+  if (!isVerified.value) return;
+  router.push({
+    name: 'Console.Domain.Overview',
+    params: { domain: item.domain },
+  });
 };
 </script>
 
 <style scoped>
 .domain-card {
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-lg);
-  padding: 24px;
+  padding: 18px 24px;
+  transition: background 0.3s ease;
+
+  &.is-clickable {
+    cursor: pointer;
+  }
+  &.is-clickable:hover {
+    background: var(--surface-hover);
+  }
 }
 
 .card-header {

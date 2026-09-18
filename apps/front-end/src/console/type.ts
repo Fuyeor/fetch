@@ -6,11 +6,11 @@ export type DomainStatus = 'pending' | 'verified' | 'failed';
 export interface Domain {
   domain: string;
   status: DomainStatus;
-  verification_token: string;
-  dns_record_name: string;
-  dns_record_value: string;
-  created_at: string;
-  verified_at: string;
+  verificationToken: string;
+  dnsRecordName: string;
+  dnsRecordValue: string;
+  createdAt: string;
+  verifiedAt: string;
 }
 
 // 添加站点入参

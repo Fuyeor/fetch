@@ -1,13 +1,13 @@
 <!-- @/search/component/input.vue -->
 <template>
-  <div class="search-bar-container">
+  <form class="search-bar-container" @submit.prevent="handleSearch">
     <input
+      required
       type="text"
       class="search-top-input"
       :value="modelValue"
       :placeholder="t('search.placeholder')"
       @input="handleInput"
-      @keydown.enter="handleSearch"
     />
 
     <button
@@ -17,14 +17,14 @@
     >
       <img :src="getIconUrl('search')" />
     </button>
-  </div>
+  </form>
 </template>
 
 <script setup lang="ts">
 import { useLocale } from '@fuyeor/locale';
 import { getIconUrl } from '@fuyeor/commons';
 
-const props = defineProps<{
+const { modelValue } = defineProps<{
   modelValue: string;
 }>();
 
@@ -41,7 +41,7 @@ const handleInput = (event: Event) => {
 };
 
 const handleSearch = () => {
-  const trimmed = props.modelValue.trim();
+  const trimmed = modelValue.trim();
   if (!trimmed) return;
   emit('search', trimmed);
 };

@@ -9,6 +9,7 @@ pub struct AddDomainDto {
 
 /// 站点详细信息响应体（包含 DNS 验证指引）
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DomainDto {
     pub domain: String,
     pub status: String,

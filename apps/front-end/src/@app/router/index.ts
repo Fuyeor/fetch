@@ -1,4 +1,4 @@
-// @/router/index.ts
+// @app/router/index.ts
 import { createRouter, type RouteRecord } from '@fuyeor/vue-router';
 import { useTransitionBar } from '@fuyeor/interactify';
 import { useAuthState } from '@/auth/state';
@@ -7,16 +7,6 @@ import { useUserState } from '@/user/state';
 const { start, done } = useTransitionBar();
 
 const routes: Array<RouteRecord> = [
-  {
-    // fetch.fuyeor.com/auth/callback
-    path: 'auth/callback',
-    name: 'AuthCallback',
-    component: () => import('@/auth/callback.vue'),
-    meta: {
-      titleKey: 'signin',
-      public: true,
-    },
-  },
   {
     // fetch.fuyeor.com/
     path: '',
@@ -28,6 +18,16 @@ const routes: Array<RouteRecord> = [
     },
   },
   {
+    // fetch.fuyeor.com/auth/callback
+    path: 'auth/callback',
+    name: 'AuthCallback',
+    component: () => import('@/auth/callback.vue'),
+    meta: {
+      titleKey: 'signin',
+      public: true,
+    },
+  },
+  {
     // fetch.fuyeor.com/search
     path: 'search',
     name: 'Search',
@@ -36,66 +36,34 @@ const routes: Array<RouteRecord> = [
     meta: { public: true },
   },
   {
-    // fetch.fuyeor.com/console
     path: 'console',
-    name: 'Console',
-    component: () => import('@/console/index.vue'),
-    meta: { titleKey: 'search.console' },
-  },
-  /*
-  {
-    // fetch.fuyeor.com/options
-    path: 'options',
-    name: 'Option',
-    component: () => import('@/Options/Index.vue'), // 作为布局/容器组件
-    meta: {
-      areaKey: 'settings',
-      titleKey: 'settings',
-    },
     children: [
+      // fetch.fuyeor.com/console
       {
-        // fetch.fuyeor.com/options/preferences
-        path: 'preferences',
-        name: 'Option.Preference',
-        component: () => import('@/Options/Preferences/Index.vue'),
-        meta: {
-          titleKey: 'settings.preferences',
-        },
+        path: '',
+        name: 'Console',
+        component: () => import('@/console/index.vue'),
+        meta: { titleKey: 'console' },
+      },
+      {
+        // fetch.fuyeor.com/console/fuyeor.com
+        path: ':domain',
+        redirect: (to) => ({
+          name: 'Console.Domain.Overview',
+          params: to.params,
+        }),
+        meta: { titleKey: 'console.domain' },
         children: [
           {
-            // fetch.fuyeor.com/options/preferences/theme
-            path: 'theme',
-            name: 'Option.Preference.Theme',
-            component: () => import('@/Options/Preferences/Theme.vue'),
-            meta: {
-              titleKey: 'settings.prefer.theme',
-              public: true,
-            },
-          },
-          {
-            // fetch.fuyeor.com/options/preferences/languages
-            path: 'languages',
-            name: 'Option.Preference.Locale',
-            component: () => import('@/Options/Preferences/Locale.vue'),
-            meta: {
-              titleKey: 'settings.prefer.locale',
-            },
-          },
-          {
-            // fetch.fuyeor.com/options/preferences/conversations
-            path: 'conversations',
-            name: 'Option.Preference.Conversations',
-            component: () =>
-              import('@/Options/Preferences/Conversations.vue'),
-            meta: {
-              titleKey: 'settings.prefer.chat',
-            },
+            // fetch.fuyeor.com/console/fuyeor.com/overview
+            path: 'overview',
+            name: 'Console.Domain.Overview',
+            component: () => import('@/console/domain/overview.vue'),
           },
         ],
       },
     ],
   },
-  */
   {
     // 404 NotFound
     path: '/*',
