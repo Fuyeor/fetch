@@ -2,9 +2,10 @@
   "extends": "@fuyeor/tsconfig/base.json",
   "compilerOptions": {
     "paths": {
+      "@app/*": ["./src/@app/*"],
       "@/*": ["./src/*"]
     },
     "types": ["vite/client", "node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"]
+  "include": ["src/**/*.ts", "src/**/*.vue"]
 }

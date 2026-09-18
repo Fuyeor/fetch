@@ -2,7 +2,7 @@
 mod config;
 mod entities;
 mod modules;
-// mod utils;
+mod utils;
 
 use axum::{
     Router,
@@ -15,8 +15,9 @@ use std::net::SocketAddr;
 
 use crate::modules::{
     auth::controller as auth,
+    domains::controller as domains,
     /*
-     domains::controller as domains,
+
     ingestions::controller as ingestions,
     sitemaps::controller as sitemaps,
     */
@@ -97,11 +98,14 @@ async fn main() {
         .route("/auth/callback", post(auth::oauth_callback))
         .route("/auth/refresh-token", post(auth::refresh))
         .route("/auth/me", get(auth::get_me))
+        // Domain Routes
+        .route(
+            "/domains",
+            get(domains::list_domains).post(domains::add_domain),
+        )
+        .route("/domains/:domain", delete(domains::delete_domain))
+        .route("/domains/:domain/verify", post(domains::verify_domain))
         /*
-          // Domain Routes
-          .route("/domains", get(domains::list_domains).post(domains::add_domain))
-          .route("/domains/:domain", delete(domains::delete_domain))
-          .route("/domains/:domain/verify", post(domains::verify_domain))
           // Sitemap Routes
           .route("/domains/:domain/sitemaps", get(sitemaps::list_sitemaps).post(sitemaps::submit_sitemap))
           // Ingestion Routes

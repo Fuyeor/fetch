@@ -4,7 +4,7 @@
     "outDir": "apps/front-end/public/assets/locale"
   },
   "main": {
-    "source": "apps/front-end/src/locale/locale.json",
+    "source": "apps/front-end/src/@app/locale.json",
     "outDir": "apps/front-end/public/assets/locale"
   }
 }

@@ -1,5 +1,5 @@
-// src/modules/auth/mod.rs
+// src/modules/domains/mod.rs
 pub mod controller;
 pub mod dto;
-pub mod extractor;
 pub mod service;
+pub mod utils;

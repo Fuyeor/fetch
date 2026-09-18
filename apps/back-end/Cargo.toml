@@ -44,3 +44,7 @@ sea-orm = { version = "1.1", features = [
 jsonwebtoken = { version = "10.3.0", default-features = false, features = [
   "rust_crypto",
 ] }
+
+# domain-related
+psl = "2.1"
+idna = "1.0"
